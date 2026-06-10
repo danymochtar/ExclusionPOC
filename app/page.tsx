@@ -76,8 +76,17 @@ export default function Home() {
 
   async function callApi<T>(url: string, init: RequestInit): Promise<T> {
     const res = await fetch(url, init);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
+    // Long-running routes stream heartbeat whitespace before the JSON
+    // payload, and report failures as { error } in a 200 body.
+    const text = (await res.text()).trim();
+    const start = text.indexOf("{");
+    let data: { error?: string } = {};
+    try {
+      data = start >= 0 ? JSON.parse(text.slice(start)) : {};
+    } catch {
+      // fall through with empty data
+    }
+    if (!res.ok || data.error) {
       throw new Error(data.error ?? `Request to ${url} failed (${res.status}).`);
     }
     return data as T;

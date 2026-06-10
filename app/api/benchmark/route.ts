@@ -8,6 +8,7 @@ import {
 } from "@/lib/pipeline";
 import { entryConfigured, findModel, ModelNotAvailableError } from "@/lib/models";
 import { describeLLMError, type CompletionUsage } from "@/lib/ai";
+import { heartbeatJson } from "@/lib/stream";
 import type { ExclusionClause } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -93,6 +94,17 @@ export async function POST(req: Request) {
     );
   }
 
+  // Heartbeat-streamed: a full model run exceeds mobile browsers' ~60s
+  // fetch limit. Errors arrive as { error } in the streamed body.
+  return heartbeatJson(() => runBenchmark(spec, providedClauses, body, cases));
+}
+
+async function runBenchmark(
+  spec: NonNullable<ReturnType<typeof findModel>>,
+  providedClauses: ExclusionClause[] | null,
+  body: { policyText?: unknown; ingest?: unknown },
+  cases: BenchmarkCase[]
+) {
   const usages: CompletionUsage[] = [];
   const servedTally = new Map<string, number>();
   const tally = (servedModel?: string) => {
@@ -171,7 +183,7 @@ export async function POST(req: Request) {
     const inputTokens = usages.reduce((s, u) => s + u.inputTokens, 0);
     const outputTokens = usages.reduce((s, u) => s + u.outputTokens, 0);
 
-    return NextResponse.json({
+    return {
       model: { id: spec.id, label: spec.label, provider: spec.provider },
       clauseCount: clauses.length,
       ingestMs,
@@ -203,23 +215,16 @@ export async function POST(req: Request) {
       estCostUsd:
         (inputTokens * spec.priceIn + outputTokens * spec.priceOut) / 1_000_000,
       rows,
-    });
+    };
   } catch (err) {
     if (err instanceof IngestParseError) {
-      return NextResponse.json(
-        { error: `${spec.label}: ${err.message}` },
-        { status: 502 }
-      );
+      throw new Error(`${spec.label}: ${err.message}`);
     }
     console.error(`benchmark failed for ${spec.id}`, err);
+    if (isConfigError(err)) throw err;
     const cause = describeLLMError(err);
-    return NextResponse.json(
-      {
-        error: isConfigError(err)
-          ? err.message
-          : `Benchmark run failed for ${spec.label}.${cause ? ` ${cause}` : ""}`,
-      },
-      { status: 500 }
+    throw new Error(
+      `Benchmark run failed for ${spec.label}.${cause ? ` ${cause}` : ""}`
     );
   }
 }

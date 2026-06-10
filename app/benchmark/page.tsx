@@ -97,7 +97,8 @@ const SORT_VALUE: Record<SortKey, (run: ModelRun) => number | string | null> = {
 async function postJson(url: string, body: unknown): Promise<any> {
   // Retry once on network-level failures (fetch rejects with TypeError —
   // e.g. Safari's "Load failed" on flaky mobile connections). API errors
-  // (4xx/5xx) are not retried.
+  // are not retried. Long-running routes stream heartbeat whitespace before
+  // the JSON payload, and report failures as { error } in the body.
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetch(url, {
@@ -105,8 +106,17 @@ async function postJson(url: string, body: unknown): Promise<any> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status}).`);
+      const text = (await res.text()).trim();
+      const start = text.indexOf("{");
+      let data: any = {};
+      try {
+        data = start >= 0 ? JSON.parse(text.slice(start)) : {};
+      } catch {
+        // fall through with empty data
+      }
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? `Request failed (${res.status}).`);
+      }
       return data;
     } catch (err) {
       if (attempt < 1 && err instanceof TypeError) continue;

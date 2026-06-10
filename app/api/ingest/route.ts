@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ingestPolicy, isConfigError, IngestParseError } from "@/lib/pipeline";
 import { ModelNotAvailableError, routeModel } from "@/lib/models";
 import { describeLLMError } from "@/lib/ai";
+import { heartbeatJson } from "@/lib/stream";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -32,37 +33,35 @@ export async function POST(req: Request) {
     );
   }
 
-  try {
-    const spec = routeModel(
-      "ingest",
-      typeof modelId === "string" ? modelId : undefined
-    );
-    const { clauses, usage, servedModel } = await ingestPolicy(
-      policyText,
-      spec
-    );
-    return NextResponse.json({
-      clauses,
-      usage,
-      servedModel: servedModel ?? null,
-      modelUsed: spec ? { id: spec.id, label: spec.label } : null,
-    });
-  } catch (err) {
-    if (err instanceof ModelNotAvailableError) {
-      return NextResponse.json({ error: err.message }, { status: 400 });
-    }
-    if (err instanceof IngestParseError) {
-      return NextResponse.json({ error: err.message }, { status: 502 });
-    }
-    console.error("ingest failed", err);
-    const cause = describeLLMError(err);
-    return NextResponse.json(
-      {
-        error: isConfigError(err)
+  // Heartbeat-streamed: reading a long policy can exceed mobile browsers'
+  // ~60s fetch limit. Errors arrive as { error } in the streamed body.
+  return heartbeatJson(async () => {
+    try {
+      const spec = routeModel(
+        "ingest",
+        typeof modelId === "string" ? modelId : undefined
+      );
+      const { clauses, usage, servedModel } = await ingestPolicy(
+        policyText as string,
+        spec
+      );
+      return {
+        clauses,
+        usage,
+        servedModel: servedModel ?? null,
+        modelUsed: spec ? { id: spec.id, label: spec.label } : null,
+      };
+    } catch (err) {
+      if (err instanceof ModelNotAvailableError || err instanceof IngestParseError) {
+        throw err;
+      }
+      console.error("ingest failed", err);
+      const cause = describeLLMError(err);
+      throw new Error(
+        isConfigError(err)
           ? err.message
-          : `Policy ingestion failed.${cause ? ` ${cause}` : ""}`,
-      },
-      { status: 500 }
-    );
-  }
+          : `Policy ingestion failed.${cause ? ` ${cause}` : ""}`
+      );
+    }
+  });
 }
