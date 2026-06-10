@@ -326,10 +326,13 @@ export default function BenchmarkPage() {
         </div>
         {azureDeployments && (
           <p className="mt-2 text-xs text-muted-foreground">
-            Your Azure resource currently serves:{" "}
+            Azure deployments on your resource:{" "}
             {azureDeployments.length > 0
-              ? azureDeployments.join(", ")
-              : "no deployments"}
+              ? azureDeployments.slice(0, 12).join(", ") +
+                (azureDeployments.length > 12
+                  ? ` +${azureDeployments.length - 12} more`
+                  : "")
+              : "none found"}
             {undeployedAzure.length > 0 &&
               " — models marked amber will fail until deployed in Azure AI Foundry (Models + endpoints → Deploy model)."}
           </p>

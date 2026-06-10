@@ -50,11 +50,16 @@ async function listResourceDeployments(
   if (!apiKey || !base) return null;
 
   try {
-    const res = await fetch(`${base}/openai/v1/models?api-version=v1`, {
-      headers: { "api-key": apiKey },
-      signal: AbortSignal.timeout(5000),
-      cache: "no-store",
-    });
+    // NOT /openai/v1/models — that returns the deployable model CATALOG
+    // (hundreds of entries), not this resource's deployments.
+    const res = await fetch(
+      `${base}/openai/deployments?api-version=2023-03-15-preview`,
+      {
+        headers: { "api-key": apiKey },
+        signal: AbortSignal.timeout(5000),
+        cache: "no-store",
+      }
+    );
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data?.data)) return null;
