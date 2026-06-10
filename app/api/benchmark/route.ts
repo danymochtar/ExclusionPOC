@@ -8,6 +8,7 @@ import {
 } from "@/lib/pipeline";
 import { entryConfigured, findModel, ModelNotAvailableError } from "@/lib/models";
 import { describeLLMError, type CompletionUsage } from "@/lib/ai";
+import type { ExclusionClause } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -36,7 +37,15 @@ export interface BenchmarkCaseRow {
 }
 
 export async function POST(req: Request) {
-  let body: { modelId?: unknown; policyText?: unknown; cases?: unknown };
+  let body: {
+    modelId?: unknown;
+    policyText?: unknown;
+    cases?: unknown;
+    // Optional pre-ingested rulebook: lets the client split a model's run
+    // into two shorter requests (mobile browsers abort fetches around 60s).
+    clauses?: unknown;
+    ingest?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -57,13 +66,18 @@ export async function POST(req: Request) {
     );
   }
 
+  const providedClauses = parseProvidedClauses(body.clauses);
   if (
-    typeof body.policyText !== "string" ||
-    !body.policyText.trim() ||
-    body.policyText.length > MAX_POLICY_CHARS
+    !providedClauses &&
+    (typeof body.policyText !== "string" ||
+      !body.policyText.trim() ||
+      body.policyText.length > MAX_POLICY_CHARS)
   ) {
     return NextResponse.json(
-      { error: "Body must include a non-empty 'policyText' string (max 100k chars)." },
+      {
+        error:
+          "Body must include a non-empty 'policyText' string (max 100k chars) or a pre-ingested 'clauses' array.",
+      },
       { status: 400 }
     );
   }
@@ -88,15 +102,25 @@ export async function POST(req: Request) {
   };
 
   try {
-    // Phase 1: ingest the policy once.
-    const ingestStart = Date.now();
-    const {
-      clauses,
-      usage: ingestUsage,
-      servedModel: ingestServedBy,
-    } = await ingestPolicy(body.policyText, spec);
-    const ingestMs = Date.now() - ingestStart;
-    usages.push(ingestUsage);
+    // Phase 1: use the pre-ingested rulebook if the client sent one,
+    // otherwise ingest the policy here.
+    let clauses;
+    let ingestMs: number;
+    let ingestServedBy: string | undefined;
+    if (providedClauses) {
+      clauses = providedClauses;
+      const stats = parseIngestStats(body.ingest);
+      ingestMs = stats.ms;
+      ingestServedBy = stats.servedModel;
+      if (stats.usage) usages.push(stats.usage);
+    } else {
+      const ingestStart = Date.now();
+      const ingested = await ingestPolicy(body.policyText as string, spec);
+      clauses = ingested.clauses;
+      ingestMs = Date.now() - ingestStart;
+      ingestServedBy = ingested.servedModel;
+      usages.push(ingested.usage);
+    }
     tally(ingestServedBy);
 
     // Phase 2: assess every case; isolate per-case failures.
@@ -198,6 +222,47 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+}
+
+function parseProvidedClauses(raw: unknown): ExclusionClause[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 100) return null;
+  const ok = raw.every(
+    (c) =>
+      c &&
+      typeof c === "object" &&
+      typeof (c as ExclusionClause).id === "string" &&
+      typeof (c as ExclusionClause).number === "string"
+  );
+  return ok ? (raw as ExclusionClause[]) : null;
+}
+
+function parseIngestStats(raw: unknown): {
+  ms: number;
+  usage?: CompletionUsage;
+  servedModel?: string;
+} {
+  if (!raw || typeof raw !== "object") return { ms: 0 };
+  const o = raw as {
+    ms?: unknown;
+    usage?: { inputTokens?: unknown; outputTokens?: unknown };
+    servedModel?: unknown;
+  };
+  return {
+    ms: typeof o.ms === "number" && Number.isFinite(o.ms) ? Math.max(0, o.ms) : 0,
+    ...(o.usage &&
+    typeof o.usage.inputTokens === "number" &&
+    typeof o.usage.outputTokens === "number"
+      ? {
+          usage: {
+            inputTokens: o.usage.inputTokens,
+            outputTokens: o.usage.outputTokens,
+          },
+        }
+      : {}),
+    ...(typeof o.servedModel === "string" && o.servedModel
+      ? { servedModel: o.servedModel }
+      : {}),
+  };
 }
 
 function parseCases(raw: unknown): BenchmarkCase[] | null {

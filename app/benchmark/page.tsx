@@ -93,6 +93,29 @@ const SORT_VALUE: Record<SortKey, (run: ModelRun) => number | string | null> = {
   estCostUsd: (r) => r.estCostUsd,
 };
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+async function postJson(url: string, body: unknown): Promise<any> {
+  // Retry once on network-level failures (fetch rejects with TypeError —
+  // e.g. Safari's "Load failed" on flaky mobile connections). API errors
+  // (4xx/5xx) are not retried.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status}).`);
+      return data;
+    } catch (err) {
+      if (attempt < 1 && err instanceof TypeError) continue;
+      throw err;
+    }
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 export default function BenchmarkPage() {
   const [policyText, setPolicyText] = useState(SAMPLE_POLICY_TEXT);
   const [casesText, setCasesText] = useState(SAMPLE_BENCHMARK_CASES);
@@ -188,8 +211,9 @@ export default function BenchmarkPage() {
       chosen.map((m) => ({ modelId: m.id, label: m.label, status: "pending" }))
     );
 
-    // One request per model so each run fits within serverless time limits;
-    // results stream into the table as each model finishes.
+    // Two short requests per model (read policy, then check conditions)
+    // instead of one long one — mobile browsers abort fetches around 60s.
+    // Results stream into the table as each model finishes.
     for (const model of chosen) {
       setRuns((prev) =>
         prev.map((r) =>
@@ -197,17 +221,23 @@ export default function BenchmarkPage() {
         )
       );
       try {
-        const res = await fetch("/api/benchmark", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            modelId: model.id,
-            policyText,
-            cases: applyGoldenAnswers(parsed.cases),
-          }),
+        const ingestStart = Date.now();
+        const ingested = await postJson("/api/ingest", {
+          policyText,
+          modelId: model.id,
         });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? `Run failed (${res.status}).`);
+        const ingestMs = Date.now() - ingestStart;
+
+        const data = await postJson("/api/benchmark", {
+          modelId: model.id,
+          cases: applyGoldenAnswers(parsed.cases),
+          clauses: ingested.clauses,
+          ingest: {
+            ms: ingestMs,
+            usage: ingested.usage,
+            servedModel: ingested.servedModel,
+          },
+        });
         setRuns((prev) =>
           prev.map((r) =>
             r.modelId === model.id ? { ...r, status: "done", run: data } : r

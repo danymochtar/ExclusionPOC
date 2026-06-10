@@ -37,9 +37,14 @@ export async function POST(req: Request) {
       "ingest",
       typeof modelId === "string" ? modelId : undefined
     );
-    const { clauses } = await ingestPolicy(policyText, spec);
+    const { clauses, usage, servedModel } = await ingestPolicy(
+      policyText,
+      spec
+    );
     return NextResponse.json({
       clauses,
+      usage,
+      servedModel: servedModel ?? null,
       modelUsed: spec ? { id: spec.id, label: spec.label } : null,
     });
   } catch (err) {
