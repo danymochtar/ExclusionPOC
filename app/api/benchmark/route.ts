@@ -6,7 +6,7 @@ import {
   IngestParseError,
   reviewFallback,
 } from "@/lib/pipeline";
-import { findModel, ModelNotAvailableError, providerConfigured } from "@/lib/models";
+import { entryConfigured, findModel, ModelNotAvailableError } from "@/lib/models";
 import { describeLLMError, type CompletionUsage } from "@/lib/ai";
 
 export const runtime = "nodejs";
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     );
   }
   const spec = findModel(body.modelId);
-  if (!spec || !providerConfigured(spec.provider)) {
+  if (!spec || !entryConfigured(spec)) {
     return NextResponse.json(
       { error: new ModelNotAvailableError(body.modelId).message },
       { status: 400 }

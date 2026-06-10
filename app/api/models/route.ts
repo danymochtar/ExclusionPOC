@@ -18,24 +18,40 @@ export async function GET() {
 }
 
 /**
- * What the Azure resource actually serves, so the UI can warn about catalog
- * entries with no matching deployment (Azure 404s on those). Best-effort:
- * null when Azure isn't configured or the listing fails.
+ * What the Azure resource(s) actually serve, so the UI can warn about
+ * catalog entries with no matching deployment (Azure 404s on those).
+ * Checks both the primary AZURE_OPENAI_* and the optional secondary
+ * AZURE_OPENAI_2_* resource. Best-effort: null when Azure isn't configured
+ * or every listing fails.
  */
 async function listAzureDeployments(): Promise<string[] | null> {
   if (!providerConfigured("azure")) return null;
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME;
+
+  const lists = await Promise.all(
+    (["AZURE_OPENAI", "AZURE_OPENAI_2"] as const).map((prefix) =>
+      listResourceDeployments(prefix)
+    )
+  );
+  const merged = [...new Set(lists.flat().filter((d): d is string => !!d))];
+  return lists.every((l) => l === null) ? null : merged;
+}
+
+async function listResourceDeployments(
+  prefix: "AZURE_OPENAI" | "AZURE_OPENAI_2"
+): Promise<string[] | null> {
+  const apiKey = process.env[`${prefix}_API_KEY`];
+  const endpoint = process.env[`${prefix}_ENDPOINT`];
+  const resourceName = process.env[`${prefix}_RESOURCE_NAME`];
   const base = endpoint
     ? endpoint.replace(/\/+$/, "").replace(/\/openai$/, "")
     : resourceName
       ? `https://${resourceName}.openai.azure.com`
       : null;
-  if (!base) return null;
+  if (!apiKey || !base) return null;
 
   try {
     const res = await fetch(`${base}/openai/v1/models?api-version=v1`, {
-      headers: { "api-key": process.env.AZURE_OPENAI_API_KEY! },
+      headers: { "api-key": apiKey },
       signal: AbortSignal.timeout(5000),
       cache: "no-store",
     });

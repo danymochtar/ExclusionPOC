@@ -2,7 +2,7 @@ import { createAzure } from "@ai-sdk/azure";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { APICallError, RetryError, generateText, type LanguageModel } from "ai";
-import type { ModelEntry, Provider } from "@/lib/models";
+import { onSecondaryAzure, type ModelEntry, type Provider } from "@/lib/models";
 
 /**
  * Thin provider wrapper so the LLM is swappable.
@@ -47,40 +47,49 @@ export function getModel(spec?: Pick<ModelEntry, "provider" | "model">): Languag
     return google(spec?.model ?? process.env.GOOGLE_MODEL ?? "gemini-3.5-flash");
   }
 
-  const azure = createAzure({
-    ...azureBase(),
-    apiKey: requireEnv("AZURE_OPENAI_API_KEY"),
-    apiVersion: process.env.AZURE_OPENAI_API_VERSION,
-  });
   // Azure deployments are named per resource; spec.model is used as the
   // deployment name, with the env var as the single-deployment fallback.
+  const deployment =
+    spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.4-mini";
+  const azure = createAzure({
+    ...azureConfigFor(deployment),
+    apiVersion: process.env.AZURE_OPENAI_API_VERSION,
+  });
   // Use chat completions rather than the default Responses API — some
   // deployments (notably model-router) don't support Responses.
-  return azure.chat(
-    spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.4-mini"
-  );
+  return azure.chat(deployment);
 }
 
 /**
- * Azure accepts either a full endpoint URL (AI Foundry style, e.g.
- * https://my-resource.cognitiveservices.azure.com) or a bare resource name
- * that maps to https://{name}.openai.azure.com.
+ * Resolve the endpoint + key for an Azure deployment. Deployments listed in
+ * AZURE_OPENAI_2_DEPLOYMENTS use the secondary AZURE_OPENAI_2_* resource;
+ * everything else uses the primary AZURE_OPENAI_* pair. Endpoints accept a
+ * full URL (Foundry style, cognitiveservices.azure.com or openai.azure.com)
+ * or a bare resource name mapping to https://{name}.openai.azure.com.
  */
-function azureBase(): { baseURL: string } | { resourceName: string } {
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+function azureConfigFor(deployment: string): (
+  | { baseURL: string }
+  | { resourceName: string }
+) & { apiKey: string } {
+  const secondary = onSecondaryAzure(deployment);
+  const prefix = secondary ? "AZURE_OPENAI_2" : "AZURE_OPENAI";
+  const apiKey = requireEnv(`${prefix}_API_KEY`);
+
+  const endpoint = process.env[`${prefix}_ENDPOINT`];
   if (endpoint) {
     const trimmed = endpoint.replace(/\/+$/, "");
     return {
       baseURL: trimmed.endsWith("/openai") ? trimmed : `${trimmed}/openai`,
+      apiKey,
     };
   }
-  const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME;
+  const resourceName = process.env[`${prefix}_RESOURCE_NAME`];
   if (!resourceName) {
     throw new Error(
-      "Missing required environment variable AZURE_OPENAI_ENDPOINT (full URL) or AZURE_OPENAI_RESOURCE_NAME. See .env.example."
+      `Missing required environment variable ${prefix}_ENDPOINT (full URL) or ${prefix}_RESOURCE_NAME. See .env.example.`
     );
   }
-  return { resourceName };
+  return { resourceName, apiKey };
 }
 
 function detectProvider(): Provider {

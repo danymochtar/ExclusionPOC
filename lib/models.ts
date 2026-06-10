@@ -41,12 +41,38 @@ const PROVIDER_KEY_ENV: Record<Provider, string> = {
 };
 
 export function providerConfigured(provider: Provider): boolean {
+  if (provider === "azure") {
+    return Boolean(
+      process.env.AZURE_OPENAI_API_KEY || process.env.AZURE_OPENAI_2_API_KEY
+    );
+  }
   return Boolean(process.env[PROVIDER_KEY_ENV[provider]]);
+}
+
+/**
+ * Azure deployments can be split across two resources: the primary
+ * AZURE_OPENAI_* pair and an optional secondary AZURE_OPENAI_2_* pair.
+ * AZURE_OPENAI_2_DEPLOYMENTS (comma-separated deployment names) says which
+ * deployments live on the secondary resource.
+ */
+export function onSecondaryAzure(model: string): boolean {
+  return (process.env.AZURE_OPENAI_2_DEPLOYMENTS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(model.toLowerCase());
+}
+
+export function entryConfigured(entry: ModelEntry): boolean {
+  if (entry.provider !== "azure") return providerConfigured(entry.provider);
+  return onSecondaryAzure(entry.model)
+    ? Boolean(process.env.AZURE_OPENAI_2_API_KEY)
+    : Boolean(process.env.AZURE_OPENAI_API_KEY);
 }
 
 /** Catalog entries usable with the API keys currently configured. */
 export function availableModels(): ModelEntry[] {
-  return MODEL_CATALOG.filter((m) => providerConfigured(m.provider));
+  return MODEL_CATALOG.filter(entryConfigured);
 }
 
 export function findModel(id: string): ModelEntry | undefined {
@@ -73,7 +99,7 @@ const PROVIDER_ORDER: Provider[] = ["anthropic", "azure", "google"];
 export function routeModel(phase: Phase, modelId?: string): ModelEntry | undefined {
   if (modelId && modelId !== "auto") {
     const entry = findModel(modelId);
-    if (!entry || !providerConfigured(entry.provider)) {
+    if (!entry || !entryConfigured(entry)) {
       throw new ModelNotAvailableError(modelId);
     }
     return entry;
