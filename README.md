@@ -66,7 +66,7 @@ Open http://localhost:3000.
 | Variable | Notes |
 | --- | --- |
 | `AI_PROVIDER` | `azure`, `anthropic`, or `google`; optional — inferred from which API key is set |
-| `AZURE_OPENAI_RESOURCE_NAME` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | Azure OpenAI |
+| `AZURE_OPENAI_ENDPOINT` (or `AZURE_OPENAI_RESOURCE_NAME`) / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | Azure OpenAI |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Anthropic |
 | `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_MODEL` | Google Gemini |
 

@@ -11,7 +11,9 @@ import type { ModelEntry, Provider } from "@/lib/models";
  * provider/model. Called bare it falls back to env-driven config:
  *
  *   AI_PROVIDER=azure
- *     AZURE_OPENAI_RESOURCE_NAME, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT
+ *     AZURE_OPENAI_API_KEY, plus either AZURE_OPENAI_ENDPOINT (full URL, e.g.
+ *     https://my-resource.cognitiveservices.azure.com) or
+ *     AZURE_OPENAI_RESOURCE_NAME; AZURE_OPENAI_DEPLOYMENT
  *   AI_PROVIDER=anthropic
  *     ANTHROPIC_API_KEY, ANTHROPIC_MODEL
  *   AI_PROVIDER=google
@@ -46,13 +48,29 @@ export function getModel(spec?: Pick<ModelEntry, "provider" | "model">): Languag
   }
 
   const azure = createAzure({
-    resourceName: requireEnv("AZURE_OPENAI_RESOURCE_NAME"),
+    ...azureBase(),
     apiKey: requireEnv("AZURE_OPENAI_API_KEY"),
     apiVersion: process.env.AZURE_OPENAI_API_VERSION,
   });
   // Azure deployments are named per resource; spec.model is used as the
   // deployment name, with the env var as the single-deployment fallback.
   return azure(spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5-mini");
+}
+
+/**
+ * Azure accepts either a full endpoint URL (AI Foundry style, e.g.
+ * https://my-resource.cognitiveservices.azure.com) or a bare resource name
+ * that maps to https://{name}.openai.azure.com.
+ */
+function azureBase(): { baseURL: string } | { resourceName: string } {
+  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
+  if (endpoint) {
+    const trimmed = endpoint.replace(/\/+$/, "");
+    return {
+      baseURL: trimmed.endsWith("/openai") ? trimmed : `${trimmed}/openai`,
+    };
+  }
+  return { resourceName: requireEnv("AZURE_OPENAI_RESOURCE_NAME") };
 }
 
 function detectProvider(): Provider {
