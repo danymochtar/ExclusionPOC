@@ -1,7 +1,7 @@
 import { createAzure } from "@ai-sdk/azure";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { APICallError, generateText, type LanguageModel } from "ai";
+import { APICallError, RetryError, generateText, type LanguageModel } from "ai";
 import type { ModelEntry, Provider } from "@/lib/models";
 
 /**
@@ -101,12 +101,19 @@ function requireEnv(name: string): string {
  * (status + provider error body excerpt — no headers/keys).
  */
 export function describeLLMError(err: unknown): string | null {
+  // Retried failures (429s, 5xx, timeouts) arrive wrapped in RetryError.
+  if (RetryError.isInstance(err)) {
+    return describeLLMError(err.lastError) ?? `Retries exhausted: ${err.reason}`;
+  }
   if (APICallError.isInstance(err)) {
     const body =
       typeof err.responseBody === "string"
         ? err.responseBody.slice(0, 300)
         : err.message;
     return `Provider returned ${err.statusCode ?? "an error"}: ${body}`;
+  }
+  if (err instanceof Error && err.name === "AbortError") {
+    return "The request timed out.";
   }
   return null;
 }
