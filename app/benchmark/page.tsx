@@ -73,6 +73,9 @@ export default function BenchmarkPage() {
   const [policyText, setPolicyText] = useState(SAMPLE_POLICY_TEXT);
   const [casesText, setCasesText] = useState(SAMPLE_BENCHMARK_CASES);
   const [models, setModels] = useState<ModelOption[]>([]);
+  const [azureDeployments, setAzureDeployments] = useState<string[] | null>(
+    null
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<RunState[]>([]);
@@ -84,6 +87,7 @@ export default function BenchmarkPage() {
       .then((data) => {
         const list: ModelOption[] = data.models ?? [];
         setModels(list);
+        setAzureDeployments(data.azureDeployments ?? null);
         // Preselect one balanced-tier model per provider for a quick start.
         setSelected(
           new Set(list.filter((m) => m.tier === "balanced").map((m) => m.id))
@@ -91,6 +95,16 @@ export default function BenchmarkPage() {
       })
       .catch(() => setModels([]));
   }, []);
+
+  // Azure 404s on catalog entries with no matching deployment — warn upfront.
+  const undeployedAzure = useMemo(() => {
+    if (!azureDeployments) return [];
+    const deployed = new Set(azureDeployments.map((d) => d.toLowerCase()));
+    return models.filter(
+      (m) =>
+        m.provider === "azure" && !deployed.has(m.id.split("/")[1].toLowerCase())
+    );
+  }, [models, azureDeployments]);
 
   const parsed = useMemo(() => parseCaseLines(casesText), [casesText]);
 
@@ -273,6 +287,7 @@ export default function BenchmarkPage() {
         <div className="mt-3 flex flex-wrap gap-2">
           {models.map((m) => {
             const active = selected.has(m.id);
+            const undeployed = undeployedAzure.some((u) => u.id === m.id);
             return (
               <button
                 key={m.id}
@@ -282,7 +297,8 @@ export default function BenchmarkPage() {
                   "cursor-pointer rounded-lg border px-3 py-1.5 text-sm shadow-sm transition-colors",
                   active
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "bg-card hover:bg-accent"
+                    : "bg-card hover:bg-accent",
+                  undeployed && "border-amber-300"
                 )}
               >
                 {m.label}
@@ -294,10 +310,30 @@ export default function BenchmarkPage() {
                 >
                   ${m.priceIn}/${m.priceOut}
                 </span>
+                {undeployed && (
+                  <span
+                    className={cn(
+                      "ml-1.5 text-xs",
+                      active ? "text-amber-200" : "text-amber-600"
+                    )}
+                  >
+                    not deployed in Azure
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
+        {azureDeployments && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Your Azure resource currently serves:{" "}
+            {azureDeployments.length > 0
+              ? azureDeployments.join(", ")
+              : "no deployments"}
+            {undeployedAzure.length > 0 &&
+              " — models marked amber will fail until deployed in Azure AI Foundry (Models + endpoints → Deploy model)."}
+          </p>
+        )}
         <Button
           className="mt-4"
           disabled={
