@@ -57,7 +57,7 @@ export function getModel(spec?: Pick<ModelEntry, "provider" | "model">): Languag
   // Use chat completions rather than the default Responses API — some
   // deployments (notably model-router) don't support Responses.
   return azure.chat(
-    spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5-mini"
+    spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5.4-mini"
   );
 }
 

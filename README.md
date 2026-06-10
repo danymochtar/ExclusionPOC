@@ -81,7 +81,7 @@ before committing).
 
 | Provider | Recommended | Price (in/out) | Max accuracy option | Budget option |
 | --- | --- | --- | --- | --- |
-| Azure OpenAI | `gpt-5-mini` (reasoning, structured outputs) | ~$0.25 / $2.00 | `gpt-5.1` / `gpt-5` (~$1.25 / $10) | `gpt-4.1-mini` |
+| Azure OpenAI | `gpt-5.4-mini` (reasoning, structured outputs) | ~$0.75 / $4.50 | `gpt-5.4` (~$2.50 / $15) | `gpt-5.4-nano` ($0.20 / $1.25) |
 | Anthropic | `claude-opus-4-8` (default in this app) | $5.00 / $25.00 | `claude-opus-4-8` | `claude-sonnet-4-6` ($3 / $15), `claude-haiku-4-5` ($1 / $5) |
 | Google Gemini | `gemini-3.5-flash` (stable) | $1.50 / $9.00 | `gemini-3.1-pro-preview` (~$2–4 / $18) | `gemini-3.1-flash-lite` ($0.25 / $1.50) |
 
@@ -117,7 +117,7 @@ Guidance for this app specifically:
   clause affects every later claim, so use the strongest model you can
   (Claude Opus, GPT-5.x, or Gemini 3.1 Pro tier).
 - **Assessment** runs per claim and parallelised — a mid-tier model
-  (`gpt-5-mini`, `claude-sonnet-4-6`, `gemini-3.5-flash`) is usually enough
+  (`gpt-5.4-mini`, `claude-sonnet-4-6`, `gemini-3.5-flash`) is usually enough
   because the rulebook is already structured; the model is matching, not
   interpreting raw policy text.
 - The POC uses one model for both phases (simplest); a per-phase model split

@@ -21,9 +21,9 @@ export const MODEL_CATALOG: ModelEntry[] = [
   // cost varies with whatever model it routes to (prices below are
   // indicative, based on it mostly choosing mini-tier models).
   { id: "azure/model-router", provider: "azure", model: "model-router", label: "Azure Model Router (auto-picks GPT)", tier: "balanced", priceIn: 0.25, priceOut: 2 },
-  { id: "azure/gpt-5.1", provider: "azure", model: "gpt-5.1", label: "GPT-5.1 (Azure)", tier: "flagship", priceIn: 1.25, priceOut: 10 },
-  { id: "azure/gpt-5-mini", provider: "azure", model: "gpt-5-mini", label: "GPT-5 mini (Azure)", tier: "balanced", priceIn: 0.25, priceOut: 2 },
-  { id: "azure/gpt-4.1-mini", provider: "azure", model: "gpt-4.1-mini", label: "GPT-4.1 mini (Azure)", tier: "budget", priceIn: 0.4, priceOut: 1.6 },
+  { id: "azure/gpt-5.4", provider: "azure", model: "gpt-5.4", label: "GPT-5.4 (Azure)", tier: "flagship", priceIn: 2.5, priceOut: 15 },
+  { id: "azure/gpt-5.4-mini", provider: "azure", model: "gpt-5.4-mini", label: "GPT-5.4 mini (Azure)", tier: "balanced", priceIn: 0.75, priceOut: 4.5 },
+  { id: "azure/gpt-5.4-nano", provider: "azure", model: "gpt-5.4-nano", label: "GPT-5.4 nano (Azure)", tier: "budget", priceIn: 0.2, priceOut: 1.25 },
   // Anthropic
   { id: "anthropic/claude-opus-4-8", provider: "anthropic", model: "claude-opus-4-8", label: "Claude Opus 4.8", tier: "flagship", priceIn: 5, priceOut: 25 },
   { id: "anthropic/claude-sonnet-4-6", provider: "anthropic", model: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", tier: "balanced", priceIn: 3, priceOut: 15 },
