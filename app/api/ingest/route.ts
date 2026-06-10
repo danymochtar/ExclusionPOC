@@ -7,6 +7,8 @@ import type { ExclusionCategory, ExclusionClause } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+const MAX_POLICY_CHARS = 100_000;
+
 const CATEGORIES: ExclusionCategory[] = [
   "diagnosis",
   "temporal",
@@ -28,6 +30,14 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  if (policyText.length > MAX_POLICY_CHARS) {
+    return NextResponse.json(
+      {
+        error: `Policy text is too long (max ${MAX_POLICY_CHARS.toLocaleString()} characters). Paste only the exclusions section.`,
+      },
+      { status: 413 }
+    );
+  }
 
   try {
     const raw = await complete(INGESTION_SYSTEM_PROMPT, policyText);
@@ -40,8 +50,12 @@ export async function POST(req: Request) {
       );
     }
 
+    // Policies often contain several numbered lists (e.g. Claim Exclusions
+    // 1-20 and Sanctions Exclusions 1-3), so slugs of the clause numbers can
+    // collide — every id must stay unique or matches cite the wrong clause.
+    const seenIds = new Map<string, number>();
     const clauses: ExclusionClause[] = parsed.map((c, i) => ({
-      id: toStableId(c.number, i),
+      id: dedupeId(toStableId(c.number, i), seenIds),
       number: str(c.number) || `Clause ${i + 1}`,
       title: str(c.title) || "Untitled exclusion",
       category: CATEGORIES.includes(c.category as ExclusionCategory)
@@ -62,6 +76,12 @@ export async function POST(req: Request) {
         : "Policy ingestion failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+function dedupeId(id: string, seen: Map<string, number>): string {
+  const count = (seen.get(id) ?? 0) + 1;
+  seen.set(id, count);
+  return count === 1 ? id : `${id}-${count}`;
 }
 
 function toStableId(number: unknown, index: number): string {

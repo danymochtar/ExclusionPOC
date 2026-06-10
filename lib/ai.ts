@@ -59,6 +59,9 @@ export async function complete(system: string, prompt: string): Promise<string> 
     system,
     prompt,
     temperature: 0,
+    // A full rulebook with verbatim clause text can exceed the 4096-token
+    // default some providers fall back to, which truncates the JSON.
+    maxOutputTokens: 16_384,
   });
   return text;
 }

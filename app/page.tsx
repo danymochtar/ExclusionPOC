@@ -40,11 +40,14 @@ export default function Home() {
     [clauses]
   );
   const diagnoses = useMemo(
-    () =>
-      diagnosesText
-        .split("\n")
-        .map((d) => d.trim())
-        .filter(Boolean),
+    () => [
+      ...new Set(
+        diagnosesText
+          .split("\n")
+          .map((d) => d.trim())
+          .filter(Boolean)
+      ),
+    ],
     [diagnosesText]
   );
 
@@ -203,7 +206,12 @@ export default function Home() {
               className="mt-3 min-h-44 font-mono text-xs"
               placeholder="…or paste the exclusion wording here"
               value={policyText}
-              onChange={(e) => setPolicyText(e.target.value)}
+              onChange={(e) => {
+                setPolicyText(e.target.value);
+                // The rulebook no longer matches the edited wording.
+                setClauses([]);
+                setResults([]);
+              }}
             />
             <Button
               className="mt-3 w-full"
@@ -299,9 +307,9 @@ export default function Home() {
                 </Button>
               </div>
               <div className="mt-3 space-y-3">
-                {results.map((result) => (
+                {results.map((result, i) => (
                   <ResultCard
-                    key={result.diagnosis}
+                    key={`${i}-${result.diagnosis}`}
                     result={result}
                     clauseById={clauseById}
                   />

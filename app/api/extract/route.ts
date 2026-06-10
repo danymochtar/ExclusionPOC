@@ -4,6 +4,8 @@ import { extractText, getDocumentProxy } from "unpdf";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const MAX_PDF_BYTES = 10 * 1024 * 1024;
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData();
@@ -19,6 +21,12 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: `Expected a PDF, got ${file.type}.` },
         { status: 400 }
+      );
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      return NextResponse.json(
+        { error: "PDF is too large (max 10 MB)." },
+        { status: 413 }
       );
     }
 

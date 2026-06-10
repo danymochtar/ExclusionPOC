@@ -79,3 +79,13 @@ Open http://localhost:3000.
   and categorised but not scored — they need member/policy dates, so they're
   shown as "needs policy data".
 - Sample data is de-identified; never use real patient identifiers.
+
+## Production hardening (not done in this POC)
+
+- Uploaded policy text goes into the LLM prompt, so a malicious document
+  could attempt prompt injection. Acceptable while documents come from
+  trusted insurers; production would need input sanitisation/isolation.
+- API error messages surface environment-variable names to ease setup;
+  replace with generic messages before production.
+- No auth or rate limiting on the API routes (input sizes are capped:
+  10 MB PDF, 100k-char policy text, 25 diagnoses per run).

@@ -14,6 +14,8 @@ export const maxDuration = 120;
 
 const STATUSES: MatchStatus[] = ["excluded", "likely", "review", "not_excluded"];
 
+const MAX_DIAGNOSES = 25;
+
 export async function POST(req: Request) {
   let body: { clauses?: unknown; diagnoses?: unknown };
   try {
@@ -42,21 +44,49 @@ export async function POST(req: Request) {
     );
   }
 
-  try {
-    const results = await Promise.all(
-      (diagnoses as string[]).map((d) =>
-        assessOne(clauses as ExclusionClause[], d.trim())
-      )
+  const uniqueDiagnoses = [...new Set(diagnoses.map((d) => d.trim()))];
+  if (uniqueDiagnoses.length > MAX_DIAGNOSES) {
+    return NextResponse.json(
+      { error: `Too many diagnoses (max ${MAX_DIAGNOSES} per run).` },
+      { status: 400 }
     );
-    return NextResponse.json({ results });
-  } catch (err) {
-    console.error("assess failed", err);
-    const message =
-      err instanceof Error && err.message.startsWith("Missing required")
-        ? err.message
-        : "Assessment failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
   }
+
+  // One LLM call per diagnosis; a transient failure on one must not lose the
+  // rest of the batch, so failures degrade to a "review" result instead.
+  const settled = await Promise.allSettled(
+    uniqueDiagnoses.map((d) => assessOne(clauses as ExclusionClause[], d))
+  );
+
+  const configError = settled.find(
+    (s): s is PromiseRejectedResult =>
+      s.status === "rejected" &&
+      s.reason instanceof Error &&
+      s.reason.message.startsWith("Missing required")
+  );
+  if (configError) {
+    return NextResponse.json(
+      { error: (configError.reason as Error).message },
+      { status: 500 }
+    );
+  }
+
+  const results = settled.map((s, i) => {
+    if (s.status === "fulfilled") return s.value;
+    console.error(`assess failed for "${uniqueDiagnoses[i]}"`, s.reason);
+    return reviewFallback(uniqueDiagnoses[i]);
+  });
+
+  return NextResponse.json({ results });
+}
+
+function reviewFallback(diagnosis: string): AssessmentResult {
+  return {
+    diagnosis,
+    status: "review",
+    matches: [],
+    overallConfidence: 0,
+  };
 }
 
 async function assessOne(
@@ -74,12 +104,7 @@ async function assessOne(
 
   // On parse failure, fall back to "review" so a human always looks at it.
   if (!parsed || typeof parsed !== "object") {
-    return {
-      diagnosis,
-      status: "review",
-      matches: [],
-      overallConfidence: 0,
-    };
+    return reviewFallback(diagnosis);
   }
 
   const knownIds = new Set(clauses.map((c) => c.id));
