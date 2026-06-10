@@ -394,8 +394,9 @@ export default function BenchmarkPage() {
 }
 
 /**
- * Which model(s) actually answered. Only shown when it differs from the
- * deployment name — i.e. router deployments that pick a model per call.
+ * Which model(s) actually answered. For router deployments this reveals the
+ * router's per-call picks; for fixed models it shows the exact serving
+ * snapshot (e.g. a dated model version).
  */
 function ServedByNote({ run }: { run?: ModelRun }) {
   if (!run) return null;
