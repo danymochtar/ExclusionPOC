@@ -65,9 +65,39 @@ Open http://localhost:3000.
 
 | Variable | Notes |
 | --- | --- |
-| `AI_PROVIDER` | `azure` (default) or `anthropic` |
+| `AI_PROVIDER` | `azure`, `anthropic`, or `google`; optional — inferred from which API key is set |
 | `AZURE_OPENAI_RESOURCE_NAME` / `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_DEPLOYMENT` | Azure OpenAI |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Anthropic |
+| `GOOGLE_GENERATIVE_AI_API_KEY` / `GOOGLE_MODEL` | Google Gemini |
+
+## Choosing a model (3-provider comparison)
+
+The workload is structured JSON extraction (ingestion, once per policy) and
+classification against a rulebook (assessment, ~8 parallel calls per run).
+Accuracy on clause boundaries and carve-outs matters more than latency;
+assessment volume makes per-token cost matter at scale. Prices are USD per
+1M input/output tokens (June 2026 — check each provider's pricing page
+before committing).
+
+| Provider | Recommended | Price (in/out) | Max accuracy option | Budget option |
+| --- | --- | --- | --- | --- |
+| Azure OpenAI | `gpt-5-mini` (reasoning, structured outputs) | ~$0.25 / $2.00 | `gpt-5.1` / `gpt-5` (~$1.25 / $10) | `gpt-4.1-mini` |
+| Anthropic | `claude-opus-4-8` (default in this app) | $5.00 / $25.00 | `claude-opus-4-8` | `claude-sonnet-4-6` ($3 / $15), `claude-haiku-4-5` ($1 / $5) |
+| Google Gemini | `gemini-3.5-flash` (stable) | $1.50 / $9.00 | `gemini-3.1-pro-preview` (~$2–4 / $18) | `gemini-3.1-flash-lite` ($0.25 / $1.50) |
+
+Guidance for this app specifically:
+
+- **Ingestion** is accuracy-sensitive and runs once per policy — a mis-parsed
+  clause affects every later claim, so use the strongest model you can
+  (Claude Opus, GPT-5.x, or Gemini 3.1 Pro tier).
+- **Assessment** runs per claim and parallelised — a mid-tier model
+  (`gpt-5-mini`, `claude-sonnet-4-6`, `gemini-3.5-flash`) is usually enough
+  because the rulebook is already structured; the model is matching, not
+  interpreting raw policy text.
+- The POC uses one model for both phases (simplest); a per-phase model split
+  is a small change in `lib/ai.ts` if cost becomes a factor.
+- All three providers are first-class JSON producers; the defensive parsing
+  in `lib/json.ts` covers the residual format drift between them.
 
 ## POC scope / non-goals
 
