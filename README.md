@@ -85,6 +85,29 @@ before committing).
 | Anthropic | `claude-opus-4-8` (default in this app) | $5.00 / $25.00 | `claude-opus-4-8` | `claude-sonnet-4-6` ($3 / $15), `claude-haiku-4-5` ($1 / $5) |
 | Google Gemini | `gemini-3.5-flash` (stable) | $1.50 / $9.00 | `gemini-3.1-pro-preview` (~$2–4 / $18) | `gemini-3.1-flash-lite` ($0.25 / $1.50) |
 
+## Model routing & benchmarking
+
+- **Per-run model selector** — when more than one provider key is configured,
+  the main page shows a model dropdown. "Auto" routes by phase: ingestion
+  (accuracy-critical, once per policy) gets the best available flagship-tier
+  model; assessment (per claim, volume) gets the best balanced-tier model.
+  Explicit picks override routing. The catalog lives in `lib/models.ts`.
+- **Benchmark page** (`/benchmark`) — runs your own test data (policy text +
+  conditions with expected answers, one per line:
+  `condition | flag 5`, `condition | flag 6/11`, `condition | clear`)
+  through each selected model and compares: rules parsed, flag accuracy,
+  citation accuracy, exceptions caught, wall time, and estimated cost from
+  real token usage. Ships pre-filled with the 8-case golden set for the
+  sample policy.
+- **Deploying the multi-model selector** — one deployment is all you need.
+  Set the API keys for every provider you want selectable as Vercel env
+  vars (`AZURE_OPENAI_*`, `ANTHROPIC_API_KEY`,
+  `GOOGLE_GENERATIVE_AI_API_KEY`); the model is resolved per request on the
+  server, and `GET /api/models` exposes only which models are usable —
+  never key material. Providers without a key simply don't appear in the
+  selector. No per-model deployments or rebuilds are required to switch
+  models.
+
 Guidance for this app specifically:
 
 - **Ingestion** is accuracy-sensitive and runs once per policy — a mis-parsed

@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
+  BarChart3,
   BookOpenText,
   Download,
   FileText,
@@ -22,10 +24,11 @@ import { SAMPLE_DIAGNOSES, SAMPLE_POLICY_TEXT } from "@/lib/sample-data";
 import { buildAssessorNote, downloadText } from "@/lib/assessor-note";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ClauseCard } from "@/components/clause-card";
 import { ResultCard } from "@/components/result-card";
+import { ModelSelect, type ModelOption } from "@/components/model-select";
 
 export default function Home() {
   const [policyText, setPolicyText] = useState("");
@@ -40,6 +43,19 @@ export default function Home() {
   const [ingesting, setIngesting] = useState(false);
   const [assessing, setAssessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [modelId, setModelId] = useState("auto");
+  const [resultsModelLabel, setResultsModelLabel] = useState<string | null>(
+    null
+  );
+
+  useEffect(() => {
+    fetch("/api/models")
+      .then((res) => res.json())
+      .then((data) => setModels(data.models ?? []))
+      .catch(() => setModels([]));
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const clauseById = useMemo(
@@ -97,7 +113,7 @@ export default function Home() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ policyText }),
+          body: JSON.stringify({ policyText, modelId }),
         }
       );
       setClauses(clauses);
@@ -114,15 +130,16 @@ export default function Home() {
     setError(null);
     setAssessing(true);
     try {
-      const { results } = await callApi<{ results: AssessmentResult[] }>(
-        "/api/assess",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clauses, diagnoses }),
-        }
-      );
+      const { results, modelUsed } = await callApi<{
+        results: AssessmentResult[];
+        modelUsed: { id: string; label: string } | null;
+      }>("/api/assess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clauses, diagnoses, modelId }),
+      });
       setResults(results);
+      setResultsModelLabel(modelUsed?.label ?? null);
       setDecisions({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Assessment failed.");
@@ -155,7 +172,19 @@ export default function Home() {
             </p>
           </div>
         </div>
-        <Badge variant="secondary">Proof of concept</Badge>
+        <div className="flex flex-wrap items-center gap-3">
+          {models.length > 1 && (
+            <ModelSelect models={models} value={modelId} onChange={setModelId} />
+          )}
+          <Link
+            href="/benchmark"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <BarChart3 className="size-4" />
+            Benchmark
+          </Link>
+          <Badge variant="secondary">Proof of concept</Badge>
+        </div>
       </header>
 
       {error && (
@@ -320,7 +349,7 @@ export default function Home() {
                   step={4}
                   icon={<ShieldAlert className="size-4" />}
                   title="Flags for review"
-                  subtitle="Each alert shows which policy rule it matched and why. You make the final call."
+                  subtitle={`Each alert shows which policy rule it matched and why. You make the final call.${resultsModelLabel ? ` (Checked by ${resultsModelLabel}.)` : ""}`}
                 />
                 <Button variant="outline" size="sm" onClick={handleExport}>
                   <Download />

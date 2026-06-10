@@ -1,23 +1,15 @@
 import { NextResponse } from "next/server";
-import { complete } from "@/lib/ai";
-import { ASSESSMENT_SYSTEM_PROMPT } from "@/lib/prompts";
-import { clamp01, safeParse } from "@/lib/json";
-import type {
-  AssessmentResult,
-  ClauseMatch,
-  ExclusionClause,
-  MatchStatus,
-} from "@/lib/types";
+import { assessOne, isConfigError, reviewFallback } from "@/lib/pipeline";
+import { ModelNotAvailableError, routeModel } from "@/lib/models";
+import type { ExclusionClause } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const STATUSES: MatchStatus[] = ["excluded", "likely", "review", "not_excluded"];
-
 const MAX_DIAGNOSES = 25;
 
 export async function POST(req: Request) {
-  let body: { clauses?: unknown; diagnoses?: unknown };
+  let body: { clauses?: unknown; diagnoses?: unknown; modelId?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -52,17 +44,30 @@ export async function POST(req: Request) {
     );
   }
 
+  let spec;
+  try {
+    spec = routeModel(
+      "assess",
+      typeof body.modelId === "string" ? body.modelId : undefined
+    );
+  } catch (err) {
+    if (err instanceof ModelNotAvailableError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+
   // One LLM call per diagnosis; a transient failure on one must not lose the
   // rest of the batch, so failures degrade to a "review" result instead.
   const settled = await Promise.allSettled(
-    uniqueDiagnoses.map((d) => assessOne(clauses as ExclusionClause[], d))
+    uniqueDiagnoses.map((d) =>
+      assessOne(clauses as ExclusionClause[], d, spec)
+    )
   );
 
   const configError = settled.find(
     (s): s is PromiseRejectedResult =>
-      s.status === "rejected" &&
-      s.reason instanceof Error &&
-      s.reason.message.startsWith("Missing required")
+      s.status === "rejected" && isConfigError(s.reason)
   );
   if (configError) {
     return NextResponse.json(
@@ -72,75 +77,13 @@ export async function POST(req: Request) {
   }
 
   const results = settled.map((s, i) => {
-    if (s.status === "fulfilled") return s.value;
+    if (s.status === "fulfilled") return s.value.result;
     console.error(`assess failed for "${uniqueDiagnoses[i]}"`, s.reason);
     return reviewFallback(uniqueDiagnoses[i]);
   });
 
-  return NextResponse.json({ results });
-}
-
-function reviewFallback(diagnosis: string): AssessmentResult {
-  return {
-    diagnosis,
-    status: "review",
-    matches: [],
-    overallConfidence: 0,
-  };
-}
-
-async function assessOne(
-  clauses: ExclusionClause[],
-  diagnosis: string
-): Promise<AssessmentResult> {
-  const prompt = `Exclusion clauses:\n${JSON.stringify(
-    clauses,
-    null,
-    2
-  )}\n\nPatient diagnosis: ${diagnosis}`;
-
-  const raw = await complete(ASSESSMENT_SYSTEM_PROMPT, prompt);
-  const parsed = safeParse<Partial<AssessmentResult>>(raw);
-
-  // On parse failure, fall back to "review" so a human always looks at it.
-  if (!parsed || typeof parsed !== "object") {
-    return reviewFallback(diagnosis);
-  }
-
-  const knownIds = new Set(clauses.map((c) => c.id));
-  const numberById = new Map(clauses.map((c) => [c.id, c.number]));
-
-  const matches: ClauseMatch[] = (Array.isArray(parsed.matches)
-    ? parsed.matches
-    : []
-  )
-    // Never let the model cite a clause we didn't provide.
-    .filter((m) => m && typeof m.clauseId === "string" && knownIds.has(m.clauseId))
-    .map((m) => ({
-      clauseId: m.clauseId,
-      clauseNumber:
-        typeof m.clauseNumber === "string" && m.clauseNumber.trim()
-          ? m.clauseNumber
-          : numberById.get(m.clauseId) ?? m.clauseId,
-      confidence: clamp01(m.confidence),
-      rationale: typeof m.rationale === "string" ? m.rationale : "",
-      ...(typeof m.exceptionNote === "string" && m.exceptionNote.trim()
-        ? { exceptionNote: m.exceptionNote }
-        : {}),
-    }));
-
-  let status: MatchStatus = STATUSES.includes(parsed.status as MatchStatus)
-    ? (parsed.status as MatchStatus)
-    : "review";
-  if (status !== "not_excluded" && matches.length === 0) {
-    // A flag with no citable clause is not actionable — send to review.
-    status = "review";
-  }
-
-  return {
-    diagnosis,
-    status,
-    matches,
-    overallConfidence: clamp01(parsed.overallConfidence),
-  };
+  return NextResponse.json({
+    results,
+    modelUsed: spec ? { id: spec.id, label: spec.label } : null,
+  });
 }

@@ -2,9 +2,13 @@ import { createAzure } from "@ai-sdk/azure";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, type LanguageModel } from "ai";
+import type { ModelEntry, Provider } from "@/lib/models";
 
 /**
- * Thin provider wrapper so the LLM is swappable via env vars.
+ * Thin provider wrapper so the LLM is swappable.
+ *
+ * Called with a registry entry (from lib/models.ts) it builds that exact
+ * provider/model. Called bare it falls back to env-driven config:
  *
  *   AI_PROVIDER=azure
  *     AZURE_OPENAI_RESOURCE_NAME, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT
@@ -16,8 +20,10 @@ import { generateText, type LanguageModel } from "ai";
  * If AI_PROVIDER is unset, the provider is inferred from which API key is
  * configured (Azure first, then Anthropic, then Google).
  */
-export function getModel(): LanguageModel {
-  const provider = (process.env.AI_PROVIDER ?? detectProvider()).toLowerCase();
+export function getModel(spec?: Pick<ModelEntry, "provider" | "model">): LanguageModel {
+  const provider = spec
+    ? spec.provider
+    : ((process.env.AI_PROVIDER ?? detectProvider()).toLowerCase() as Provider);
 
   if (provider === "anthropic") {
     // baseURL supports gateways/proxies; some inject auth, so the key is
@@ -29,14 +35,14 @@ export function getModel(): LanguageModel {
         ? process.env.ANTHROPIC_API_KEY ?? "unused"
         : requireEnv("ANTHROPIC_API_KEY"),
     });
-    return anthropic(process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8");
+    return anthropic(spec?.model ?? process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8");
   }
 
   if (provider === "google") {
     const google = createGoogleGenerativeAI({
       apiKey: requireEnv("GOOGLE_GENERATIVE_AI_API_KEY"),
     });
-    return google(process.env.GOOGLE_MODEL ?? "gemini-3.5-flash");
+    return google(spec?.model ?? process.env.GOOGLE_MODEL ?? "gemini-3.5-flash");
   }
 
   const azure = createAzure({
@@ -44,10 +50,12 @@ export function getModel(): LanguageModel {
     apiKey: requireEnv("AZURE_OPENAI_API_KEY"),
     apiVersion: process.env.AZURE_OPENAI_API_VERSION,
   });
-  return azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5-mini");
+  // Azure deployments are named per resource; spec.model is used as the
+  // deployment name, with the env var as the single-deployment fallback.
+  return azure(spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5-mini");
 }
 
-function detectProvider(): "azure" | "anthropic" | "google" {
+function detectProvider(): Provider {
   if (process.env.AZURE_OPENAI_API_KEY) return "azure";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return "google";
@@ -64,9 +72,18 @@ function requireEnv(name: string): string {
   return value;
 }
 
-export async function complete(system: string, prompt: string): Promise<string> {
-  const { text } = await generateText({
-    model: getModel(),
+export interface CompletionUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export async function complete(
+  system: string,
+  prompt: string,
+  spec?: Pick<ModelEntry, "provider" | "model">
+): Promise<{ text: string; usage: CompletionUsage }> {
+  const { text, usage } = await generateText({
+    model: getModel(spec),
     system,
     prompt,
     temperature: 0,
@@ -74,5 +91,11 @@ export async function complete(system: string, prompt: string): Promise<string> 
     // default some providers fall back to, which truncates the JSON.
     maxOutputTokens: 16_384,
   });
-  return text;
+  return {
+    text,
+    usage: {
+      inputTokens: usage.inputTokens ?? 0,
+      outputTokens: usage.outputTokens ?? 0,
+    },
+  };
 }
