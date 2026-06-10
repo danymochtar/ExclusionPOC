@@ -97,8 +97,11 @@ before committing).
   `condition | flag 5`, `condition | flag 6/11`, `condition | clear`)
   through each selected model and compares: rules parsed, flag accuracy,
   citation accuracy, exceptions caught, wall time, and estimated cost from
-  real token usage. Ships pre-filled with the 8-case golden set for the
-  sample policy.
+  real token usage. The expected answer after the `|` is the marking key —
+  models never see it. Ships pre-filled with a 13-case golden set for the
+  sample policy, phrased like real claim lines and including carve-out
+  cases (accidental-injury rhinoplasty/dental) and negative controls
+  (appendicitis, dengue).
 - **Deploying the multi-model selector** — one deployment is all you need.
   Set the API keys for every provider you want selectable as Vercel env
   vars (`AZURE_OPENAI_*`, `ANTHROPIC_API_KEY`,

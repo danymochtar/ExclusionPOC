@@ -234,7 +234,10 @@ export default function BenchmarkPage() {
                 <code className="rounded bg-muted px-1 py-0.5 text-xs">
                   condition | clear
                 </code>{" "}
-                (should not be flagged).
+                (should not be flagged). The part after{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">|</code>{" "}
+                is your answer key for marking — the models never see it; they
+                only get the condition text.
               </>
             }
           />
