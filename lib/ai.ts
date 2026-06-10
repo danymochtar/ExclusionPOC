@@ -123,7 +123,13 @@ export function describeLLMError(err: unknown): string | null {
       typeof err.responseBody === "string"
         ? err.responseBody.slice(0, 300)
         : err.message;
-    return `Provider returned ${err.statusCode ?? "an error"}: ${body}`;
+    let host = "";
+    try {
+      host = ` from ${new URL(err.url).host}`;
+    } catch {
+      // no usable URL on the error
+    }
+    return `Provider returned ${err.statusCode ?? "an error"}${host}: ${body}`;
   }
   if (err instanceof Error && err.name === "AbortError") {
     return "The request timed out.";
