@@ -39,6 +39,7 @@ interface CaseRow {
   citationCorrect: boolean | null;
   confidence: number;
   failed: boolean;
+  servedBy?: string;
 }
 
 interface ModelRun {
@@ -51,6 +52,8 @@ interface ModelRun {
   exceptionsCaught: number;
   avgConfidence: number;
   failedCalls: number;
+  servedModels: Record<string, number>;
+  ingestServedBy: string | null;
   usage: { inputTokens: number; outputTokens: number };
   estCostUsd: number;
   rows: CaseRow[];
@@ -335,7 +338,10 @@ export default function BenchmarkPage() {
               <tbody>
                 {runs.map((r) => (
                   <tr key={r.modelId} className="border-b last:border-0">
-                    <td className="px-4 py-2.5 font-medium">{r.label}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="font-medium">{r.label}</span>
+                      <ServedByNote run={r.run} />
+                    </td>
                     {r.status === "done" && r.run ? (
                       <>
                         <td className="px-4 py-2.5">{r.run.clauseCount}</td>
@@ -387,6 +393,25 @@ export default function BenchmarkPage() {
   );
 }
 
+/**
+ * Which model(s) actually answered. Only shown when it differs from the
+ * deployment name — i.e. router deployments that pick a model per call.
+ */
+function ServedByNote({ run }: { run?: ModelRun }) {
+  if (!run) return null;
+  const entries = Object.entries(run.servedModels ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+      answered by{" "}
+      {entries
+        .map(([model, calls]) => `${model} ×${calls}`)
+        .join(", ")}
+      {run.ingestServedBy ? ` · policy read by ${run.ingestServedBy}` : ""}
+    </span>
+  );
+}
+
 function ModelDetail({ run }: { run: ModelRun }) {
   const [open, setOpen] = useState(false);
   return (
@@ -418,6 +443,7 @@ function ModelDetail({ run }: { run: ModelRun }) {
                   <th className="px-2 py-2 font-medium">Flag</th>
                   <th className="px-2 py-2 font-medium">Citation</th>
                   <th className="px-2 py-2 font-medium">Exception</th>
+                  <th className="px-2 py-2 font-medium">Answered by</th>
                 </tr>
               </thead>
               <tbody>
@@ -457,6 +483,9 @@ function ModelDetail({ run }: { run: ModelRun }) {
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
+                    </td>
+                    <td className="px-2 py-2 text-xs text-muted-foreground">
+                      {row.servedBy ?? "—"}
                     </td>
                   </tr>
                 ))}

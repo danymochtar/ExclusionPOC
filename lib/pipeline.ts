@@ -32,8 +32,16 @@ export class IngestParseError extends Error {
 export async function ingestPolicy(
   policyText: string,
   spec?: ModelEntry
-): Promise<{ clauses: ExclusionClause[]; usage: CompletionUsage }> {
-  const { text, usage } = await complete(INGESTION_SYSTEM_PROMPT, policyText, spec);
+): Promise<{
+  clauses: ExclusionClause[];
+  usage: CompletionUsage;
+  servedModel?: string;
+}> {
+  const { text, usage, servedModel } = await complete(
+    INGESTION_SYSTEM_PROMPT,
+    policyText,
+    spec
+  );
   const parsed = safeParse<Partial<ExclusionClause>[]>(text);
 
   if (!Array.isArray(parsed) || parsed.length === 0) {
@@ -57,26 +65,34 @@ export async function ingestPolicy(
     rawText: str(c.rawText),
   }));
 
-  return { clauses, usage };
+  return { clauses, usage, servedModel };
 }
 
 export async function assessOne(
   clauses: ExclusionClause[],
   diagnosis: string,
   spec?: ModelEntry
-): Promise<{ result: AssessmentResult; usage: CompletionUsage }> {
+): Promise<{
+  result: AssessmentResult;
+  usage: CompletionUsage;
+  servedModel?: string;
+}> {
   const prompt = `Exclusion clauses:\n${JSON.stringify(
     clauses,
     null,
     2
   )}\n\nPatient diagnosis: ${diagnosis}`;
 
-  const { text, usage } = await complete(ASSESSMENT_SYSTEM_PROMPT, prompt, spec);
+  const { text, usage, servedModel } = await complete(
+    ASSESSMENT_SYSTEM_PROMPT,
+    prompt,
+    spec
+  );
   const parsed = safeParse<Partial<AssessmentResult>>(text);
 
   // On parse failure, fall back to "review" so a human always looks at it.
   if (!parsed || typeof parsed !== "object") {
-    return { result: reviewFallback(diagnosis), usage };
+    return { result: reviewFallback(diagnosis), usage, servedModel };
   }
 
   const knownIds = new Set(clauses.map((c) => c.id));
@@ -117,6 +133,7 @@ export async function assessOne(
       overallConfidence: clamp01(parsed.overallConfidence),
     },
     usage,
+    servedModel,
   };
 }
 

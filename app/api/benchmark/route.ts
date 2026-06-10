@@ -32,6 +32,7 @@ export interface BenchmarkCaseRow {
   citationCorrect: boolean | null; // null = not applicable
   confidence: number;
   failed: boolean; // call failed and degraded to review
+  servedBy?: string; // actual model that served the call (router deployments)
 }
 
 export async function POST(req: Request) {
@@ -79,15 +80,24 @@ export async function POST(req: Request) {
   }
 
   const usages: CompletionUsage[] = [];
+  const servedTally = new Map<string, number>();
+  const tally = (servedModel?: string) => {
+    if (servedModel) {
+      servedTally.set(servedModel, (servedTally.get(servedModel) ?? 0) + 1);
+    }
+  };
+
   try {
     // Phase 1: ingest the policy once.
     const ingestStart = Date.now();
-    const { clauses, usage: ingestUsage } = await ingestPolicy(
-      body.policyText,
-      spec
-    );
+    const {
+      clauses,
+      usage: ingestUsage,
+      servedModel: ingestServedBy,
+    } = await ingestPolicy(body.policyText, spec);
     const ingestMs = Date.now() - ingestStart;
     usages.push(ingestUsage);
+    tally(ingestServedBy);
 
     // Phase 2: assess every case; isolate per-case failures.
     const assessStart = Date.now();
@@ -100,11 +110,13 @@ export async function POST(req: Request) {
       const c = cases[i];
       const failed = s.status === "rejected";
       if (failed) console.error(`benchmark assess failed: "${c.diagnosis}"`, (s as PromiseRejectedResult).reason);
-      const result = failed
-        ? reviewFallback(c.diagnosis)
-        : (s as PromiseFulfilledResult<Awaited<ReturnType<typeof assessOne>>>).value.result;
-      if (!failed) {
-        usages.push((s as PromiseFulfilledResult<Awaited<ReturnType<typeof assessOne>>>).value.usage);
+      const value = failed
+        ? null
+        : (s as PromiseFulfilledResult<Awaited<ReturnType<typeof assessOne>>>).value;
+      const result = value?.result ?? reviewFallback(c.diagnosis);
+      if (value) {
+        usages.push(value.usage);
+        tally(value.servedModel);
       }
 
       const flagged = result.status !== "not_excluded";
@@ -125,6 +137,7 @@ export async function POST(req: Request) {
         citationCorrect,
         confidence: result.overallConfidence,
         failed,
+        ...(value?.servedModel ? { servedBy: value.servedModel } : {}),
       };
     });
 
@@ -148,6 +161,10 @@ export async function POST(req: Request) {
         rows.length
       ),
       failedCalls: rows.filter((r) => r.failed).length,
+      // Which models actually served the calls — for router deployments
+      // this reveals the router's picks (e.g. {"gpt-5-mini": 7, ...}).
+      servedModels: Object.fromEntries(servedTally),
+      ingestServedBy: ingestServedBy ?? null,
       usage: { inputTokens, outputTokens },
       estCostUsd:
         (inputTokens * spec.priceIn + outputTokens * spec.priceOut) / 1_000_000,

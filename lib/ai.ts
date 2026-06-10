@@ -131,8 +131,8 @@ export async function complete(
   system: string,
   prompt: string,
   spec?: Pick<ModelEntry, "provider" | "model">
-): Promise<{ text: string; usage: CompletionUsage }> {
-  const { text, usage } = await generateText({
+): Promise<{ text: string; usage: CompletionUsage; servedModel?: string }> {
+  const { text, usage, response } = await generateText({
     model: getModel(spec),
     system,
     prompt,
@@ -147,5 +147,8 @@ export async function complete(
       inputTokens: usage.inputTokens ?? 0,
       outputTokens: usage.outputTokens ?? 0,
     },
+    // The model that actually served the call — for router deployments this
+    // is the underlying model the router picked, not the deployment name.
+    servedModel: response?.modelId,
   };
 }
