@@ -54,7 +54,11 @@ export function getModel(spec?: Pick<ModelEntry, "provider" | "model">): Languag
   });
   // Azure deployments are named per resource; spec.model is used as the
   // deployment name, with the env var as the single-deployment fallback.
-  return azure(spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5-mini");
+  // Use chat completions rather than the default Responses API — some
+  // deployments (notably model-router) don't support Responses.
+  return azure.chat(
+    spec?.model ?? process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-5-mini"
+  );
 }
 
 /**
