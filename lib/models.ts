@@ -17,6 +17,10 @@ export interface ModelEntry {
 export const MODEL_CATALOG: ModelEntry[] = [
   // Azure OpenAI — `model` is used as the deployment name unless
   // AZURE_OPENAI_DEPLOYMENT overrides it (single-deployment setups).
+  // model-router auto-selects an underlying GPT model per request; its real
+  // cost varies with whatever model it routes to (prices below are
+  // indicative, based on it mostly choosing mini-tier models).
+  { id: "azure/model-router", provider: "azure", model: "model-router", label: "Azure Model Router (auto-picks GPT)", tier: "balanced", priceIn: 0.25, priceOut: 2 },
   { id: "azure/gpt-5.1", provider: "azure", model: "gpt-5.1", label: "GPT-5.1 (Azure)", tier: "flagship", priceIn: 1.25, priceOut: 10 },
   { id: "azure/gpt-5-mini", provider: "azure", model: "gpt-5-mini", label: "GPT-5 mini (Azure)", tier: "balanced", priceIn: 0.25, priceOut: 2 },
   { id: "azure/gpt-4.1-mini", provider: "azure", model: "gpt-4.1-mini", label: "GPT-4.1 mini (Azure)", tier: "budget", priceIn: 0.4, priceOut: 1.6 },
@@ -77,7 +81,17 @@ export function routeModel(phase: Phase, modelId?: string): ModelEntry | undefin
   const available = availableModels();
   for (const tier of PHASE_TIERS[phase]) {
     for (const provider of PROVIDER_ORDER) {
-      const entry = available.find((m) => m.tier === tier && m.provider === provider);
+      const candidates = available.filter(
+        (m) => m.tier === tier && m.provider === provider
+      );
+      // AZURE_OPENAI_DEPLOYMENT names a deployment known to exist — prefer
+      // its catalog entry, since Azure 404s on undeployed models.
+      const entry =
+        candidates.find(
+          (m) =>
+            m.provider === "azure" &&
+            m.model === process.env.AZURE_OPENAI_DEPLOYMENT
+        ) ?? candidates[0];
       if (entry) return entry;
     }
   }
