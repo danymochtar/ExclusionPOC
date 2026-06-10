@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
+  ArrowUpDown,
   BarChart3,
   Check,
   ChevronDown,
@@ -69,6 +72,27 @@ interface RunState {
   run?: ModelRun;
 }
 
+type SortKey =
+  | "label"
+  | "clauseCount"
+  | "flaggedCount"
+  | "flagAccuracy"
+  | "citationAccuracy"
+  | "exceptionsCaught"
+  | "time"
+  | "estCostUsd";
+
+const SORT_VALUE: Record<SortKey, (run: ModelRun) => number | string | null> = {
+  label: (r) => r.model.label.toLowerCase(),
+  clauseCount: (r) => r.clauseCount,
+  flaggedCount: (r) => r.flaggedCount,
+  flagAccuracy: (r) => r.flagAccuracy,
+  citationAccuracy: (r) => r.citationAccuracy,
+  exceptionsCaught: (r) => r.exceptionsCaught,
+  time: (r) => r.ingestMs + r.assessMs,
+  estCostUsd: (r) => r.estCostUsd,
+};
+
 export default function BenchmarkPage() {
   const [policyText, setPolicyText] = useState(SAMPLE_POLICY_TEXT);
   const [casesText, setCasesText] = useState(SAMPLE_BENCHMARK_CASES);
@@ -84,6 +108,34 @@ export default function BenchmarkPage() {
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<RunState[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+
+  // Completed runs sort by the chosen column; pending/running/failed rows
+  // keep their original order at the bottom.
+  const sortedRuns = useMemo(() => {
+    if (!sort) return runs;
+    const value = SORT_VALUE[sort.key];
+    return [...runs].sort((a, b) => {
+      if (!a.run || !b.run) return a.run ? -1 : b.run ? 1 : 0;
+      const va = value(a.run);
+      const vb = value(b.run);
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      if (va < vb) return -sort.dir;
+      if (va > vb) return sort.dir;
+      return 0;
+    });
+  }, [runs, sort]);
+
+  function toggleSort(key: SortKey) {
+    setSort((prev) =>
+      prev?.key === key
+        ? prev.dir === 1
+          ? { key, dir: -1 }
+          : null
+        : { key, dir: 1 }
+    );
+  }
 
   useEffect(() => {
     fetch("/api/models")
@@ -380,18 +432,18 @@ export default function BenchmarkPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium">Model</th>
-                  <th className="px-4 py-2.5 font-medium">Rules found</th>
-                  <th className="px-4 py-2.5 font-medium">Flagged</th>
-                  <th className="px-4 py-2.5 font-medium">Flag accuracy</th>
-                  <th className="px-4 py-2.5 font-medium">Citation accuracy</th>
-                  <th className="px-4 py-2.5 font-medium">Exceptions caught</th>
-                  <th className="px-4 py-2.5 font-medium">Time</th>
-                  <th className="px-4 py-2.5 font-medium">Est. cost</th>
+                  <SortHeader label="Model" k="label" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Rules found" k="clauseCount" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Flagged" k="flaggedCount" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Flag accuracy" k="flagAccuracy" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Citation accuracy" k="citationAccuracy" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Exceptions caught" k="exceptionsCaught" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Time" k="time" sort={sort} onSort={toggleSort} />
+                  <SortHeader label="Est. cost" k="estCostUsd" sort={sort} onSort={toggleSort} />
                 </tr>
               </thead>
               <tbody>
-                {runs.map((r) => (
+                {sortedRuns.map((r) => (
                   <tr key={r.modelId} className="border-b last:border-0">
                     <td className="px-4 py-2.5">
                       <span className="font-medium">{r.label}</span>
@@ -448,6 +500,40 @@ export default function BenchmarkPage() {
         </section>
       )}
     </main>
+  );
+}
+
+function SortHeader({
+  label,
+  k,
+  sort,
+  onSort,
+}: {
+  label: string;
+  k: SortKey;
+  sort: { key: SortKey; dir: 1 | -1 } | null;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort?.key === k;
+  return (
+    <th className="px-4 py-2.5 font-medium">
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className="flex cursor-pointer items-center gap-1 hover:text-foreground"
+      >
+        {label}
+        {active ? (
+          sort.dir === 1 ? (
+            <ArrowUp className="size-3" />
+          ) : (
+            <ArrowDown className="size-3" />
+          )
+        ) : (
+          <ArrowUpDown className="size-3 opacity-40" />
+        )}
+      </button>
+    </th>
   );
 }
 
