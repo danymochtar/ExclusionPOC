@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ingestPolicy, isConfigError, IngestParseError } from "@/lib/pipeline";
 import { ModelNotAvailableError, routeModel } from "@/lib/models";
+import { describeLLMError } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -49,8 +50,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: err.message }, { status: 502 });
     }
     console.error("ingest failed", err);
+    const cause = describeLLMError(err);
     return NextResponse.json(
-      { error: isConfigError(err) ? err.message : "Policy ingestion failed." },
+      {
+        error: isConfigError(err)
+          ? err.message
+          : `Policy ingestion failed.${cause ? ` ${cause}` : ""}`,
+      },
       { status: 500 }
     );
   }

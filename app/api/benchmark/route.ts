@@ -7,7 +7,7 @@ import {
   reviewFallback,
 } from "@/lib/pipeline";
 import { findModel, ModelNotAvailableError, providerConfigured } from "@/lib/models";
-import type { CompletionUsage } from "@/lib/ai";
+import { describeLLMError, type CompletionUsage } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -161,11 +161,12 @@ export async function POST(req: Request) {
       );
     }
     console.error(`benchmark failed for ${spec.id}`, err);
+    const cause = describeLLMError(err);
     return NextResponse.json(
       {
         error: isConfigError(err)
           ? err.message
-          : `Benchmark run failed for ${spec.label}.`,
+          : `Benchmark run failed for ${spec.label}.${cause ? ` ${cause}` : ""}`,
       },
       { status: 500 }
     );

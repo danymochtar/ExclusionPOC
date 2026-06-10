@@ -1,7 +1,7 @@
 import { createAzure } from "@ai-sdk/azure";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, type LanguageModel } from "ai";
+import { APICallError, generateText, type LanguageModel } from "ai";
 import type { ModelEntry, Provider } from "@/lib/models";
 
 /**
@@ -94,6 +94,21 @@ function requireEnv(name: string): string {
     );
   }
   return value;
+}
+
+/**
+ * Human-readable cause for a failed LLM call, safe to show in the UI
+ * (status + provider error body excerpt — no headers/keys).
+ */
+export function describeLLMError(err: unknown): string | null {
+  if (APICallError.isInstance(err)) {
+    const body =
+      typeof err.responseBody === "string"
+        ? err.responseBody.slice(0, 300)
+        : err.message;
+    return `Provider returned ${err.statusCode ?? "an error"}: ${body}`;
+  }
+  return null;
 }
 
 export interface CompletionUsage {
