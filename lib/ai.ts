@@ -5,13 +5,16 @@ import { generateText, type LanguageModel } from "ai";
 /**
  * Thin provider wrapper so the LLM is swappable via env vars.
  *
- *   AI_PROVIDER=azure (default)
+ *   AI_PROVIDER=azure
  *     AZURE_OPENAI_RESOURCE_NAME, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT
  *   AI_PROVIDER=anthropic
  *     ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+ *
+ * If AI_PROVIDER is unset, the provider is inferred from which API key is
+ * configured (Azure wins if both are present).
  */
 export function getModel(): LanguageModel {
-  const provider = (process.env.AI_PROVIDER ?? "azure").toLowerCase();
+  const provider = (process.env.AI_PROVIDER ?? detectProvider()).toLowerCase();
 
   if (provider === "anthropic") {
     // baseURL supports gateways/proxies; some inject auth, so the key is
@@ -32,6 +35,12 @@ export function getModel(): LanguageModel {
     apiVersion: process.env.AZURE_OPENAI_API_VERSION,
   });
   return azure(process.env.AZURE_OPENAI_DEPLOYMENT ?? "gpt-4o");
+}
+
+function detectProvider(): "azure" | "anthropic" {
+  if (process.env.AZURE_OPENAI_API_KEY) return "azure";
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  return "azure";
 }
 
 function requireEnv(name: string): string {
