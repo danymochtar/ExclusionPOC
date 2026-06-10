@@ -76,6 +76,10 @@ export default function BenchmarkPage() {
   const [azureDeployments, setAzureDeployments] = useState<string[] | null>(
     null
   );
+  const [azureSecondary, setAzureSecondary] = useState<{
+    keySet: boolean;
+    deployments: string[];
+  } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [runs, setRuns] = useState<RunState[]>([]);
@@ -88,6 +92,7 @@ export default function BenchmarkPage() {
         const list: ModelOption[] = data.models ?? [];
         setModels(list);
         setAzureDeployments(data.azureDeployments ?? null);
+        setAzureSecondary(data.azureSecondary ?? null);
         // Preselect one balanced-tier model per provider for a quick start.
         setSelected(
           new Set(list.filter((m) => m.tier === "balanced").map((m) => m.id))
@@ -335,6 +340,16 @@ export default function BenchmarkPage() {
               : "none found"}
             {undeployedAzure.length > 0 &&
               " — models marked amber will fail until deployed in Azure AI Foundry (Models + endpoints → Deploy model)."}
+          </p>
+        )}
+        {azureSecondary && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Second Azure resource:{" "}
+            {!azureSecondary.keySet
+              ? "endpoint set but AZURE_OPENAI_2_API_KEY is missing."
+              : azureSecondary.deployments.length === 0
+                ? "endpoint + key set, but AZURE_OPENAI_2_DEPLOYMENTS is empty — nothing routes to it. Set it to the deployment name(s), e.g. model-router."
+                : `routing ${azureSecondary.deployments.join(", ")} to it.`}
           </p>
         )}
         <Button

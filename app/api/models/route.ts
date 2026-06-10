@@ -14,7 +14,23 @@ export async function GET() {
     priceOut: m.priceOut,
   }));
   const azureDeployments = await listAzureDeployments();
-  return NextResponse.json({ models, default: "auto", azureDeployments });
+  // Secondary-resource routing status (booleans + names only, no secrets) so
+  // the UI can flag a half-configured split.
+  const azureSecondary = process.env.AZURE_OPENAI_2_ENDPOINT
+    ? {
+        keySet: Boolean(process.env.AZURE_OPENAI_2_API_KEY),
+        deployments: (process.env.AZURE_OPENAI_2_DEPLOYMENTS ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }
+    : null;
+  return NextResponse.json({
+    models,
+    default: "auto",
+    azureDeployments,
+    azureSecondary,
+  });
 }
 
 /**
