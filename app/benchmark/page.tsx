@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 
 import {
+  applyGoldenAnswers,
   parseCaseLines,
   SAMPLE_BENCHMARK_CASES,
-  SAMPLE_BENCHMARK_CASES_SCORED,
 } from "@/lib/benchmark-cases";
 import { SAMPLE_POLICY_TEXT } from "@/lib/sample-data";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -132,7 +132,7 @@ export default function BenchmarkPage() {
           body: JSON.stringify({
             modelId: model.id,
             policyText,
-            cases: parsed.cases,
+            cases: applyGoldenAnswers(parsed.cases),
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -233,14 +233,6 @@ export default function BenchmarkPage() {
               <FlaskConical />
               Load sample cases
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCasesText(SAMPLE_BENCHMARK_CASES_SCORED)}
-            >
-              <FlaskConical />
-              Samples with marking key
-            </Button>
           </div>
           <Textarea
             className="mt-2 min-h-40 font-mono text-xs"
@@ -253,7 +245,9 @@ export default function BenchmarkPage() {
               ` · ${parsed.errors.length} line(s) not understood`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Want a graded score? Add the correct answer after the condition —{" "}
+            The built-in sample conditions are graded automatically against a
+            stored answer key (the models never see it). To grade your own
+            conditions, add the correct answer after the condition —{" "}
             <code className="rounded bg-muted px-1 py-0.5">
               Tooth extraction | flag 5
             </code>{" "}
@@ -261,8 +255,7 @@ export default function BenchmarkPage() {
             <code className="rounded bg-muted px-1 py-0.5">
               Appendicitis | clear
             </code>{" "}
-            means &ldquo;should not be flagged&rdquo;. These answers are only
-            used to mark the results — they are never sent to the models.
+            means &ldquo;should not be flagged&rdquo;.
           </p>
         </section>
       </div>

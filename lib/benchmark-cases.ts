@@ -90,3 +90,25 @@ In-vitro fertilisation (IVF) treatment | flag 8
 Investigation of obstructive sleep apnoea and snoring | flag 15
 Acute appendicitis with emergency appendicectomy | clear
 Dengue fever with warning signs | clear`;
+
+/**
+ * Built-in answer key: conditions matching a known sample (case-insensitive)
+ * are graded automatically even when entered without a marking key, so the
+ * default demo shows accuracy scores while the input stays a plain list.
+ * An explicit key on the line always wins.
+ */
+export function applyGoldenAnswers(
+  cases: BenchmarkCaseInput[]
+): BenchmarkCaseInput[] {
+  const golden = new Map(
+    parseCaseLines(SAMPLE_BENCHMARK_CASES_SCORED).cases.map((c) => [
+      c.diagnosis.toLowerCase(),
+      c,
+    ])
+  );
+  return cases.map((c) => {
+    if (c.expectFlag !== undefined) return c;
+    const known = golden.get(c.diagnosis.toLowerCase());
+    return known ? { ...known, diagnosis: c.diagnosis } : c;
+  });
+}
