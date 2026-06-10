@@ -70,7 +70,13 @@ function azureBase(): { baseURL: string } | { resourceName: string } {
       baseURL: trimmed.endsWith("/openai") ? trimmed : `${trimmed}/openai`,
     };
   }
-  return { resourceName: requireEnv("AZURE_OPENAI_RESOURCE_NAME") };
+  const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME;
+  if (!resourceName) {
+    throw new Error(
+      "Missing required environment variable AZURE_OPENAI_ENDPOINT (full URL) or AZURE_OPENAI_RESOURCE_NAME. See .env.example."
+    );
+  }
+  return { resourceName };
 }
 
 function detectProvider(): Provider {
