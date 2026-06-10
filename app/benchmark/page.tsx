@@ -222,22 +222,7 @@ export default function BenchmarkPage() {
           <SectionHeading
             icon={<ListChecks className="size-4" />}
             title="Test conditions"
-            subtitle={
-              <>
-                One condition per line — that&apos;s all you need. To also
-                score accuracy, you can add a marking key after a{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">|</code>:{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  | flag 5
-                </code>{" "}
-                (should be flagged, rule 5),{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  | clear
-                </code>{" "}
-                (should not be flagged). The key is only used for marking —
-                the models never see it.
-              </>
-            }
+            subtitle="The patient conditions to test, one per line. Every model checks the same list."
           />
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
@@ -266,6 +251,18 @@ export default function BenchmarkPage() {
             {parsed.cases.length} test case{parsed.cases.length === 1 ? "" : "s"}
             {parsed.errors.length > 0 &&
               ` · ${parsed.errors.length} line(s) not understood`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Want a graded score? Add the correct answer after the condition —{" "}
+            <code className="rounded bg-muted px-1 py-0.5">
+              Tooth extraction | flag 5
+            </code>{" "}
+            means &ldquo;should be flagged under rule 5&rdquo;,{" "}
+            <code className="rounded bg-muted px-1 py-0.5">
+              Appendicitis | clear
+            </code>{" "}
+            means &ldquo;should not be flagged&rdquo;. These answers are only
+            used to mark the results — they are never sent to the models.
           </p>
         </section>
       </div>
