@@ -31,3 +31,11 @@ export interface AssessmentResult {
   matches: ClauseMatch[]; // empty if not_excluded
   overallConfidence: number; // 0..1
 }
+
+// The human's call on a flag — the AI never makes this.
+export type AssessorAction = "confirm" | "override" | "info";
+
+export interface AssessorDecision {
+  action: AssessorAction;
+  reason?: string;
+}

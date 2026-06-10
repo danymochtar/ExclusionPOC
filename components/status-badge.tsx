@@ -9,17 +9,17 @@ const STATUS_CONFIG: Record<
   { label: string; className: string; Icon: typeof OctagonAlert }
 > = {
   excluded: {
-    label: "Excluded — verify",
+    label: "Exclusion found — verify",
     className: "border-red-200 bg-red-100 text-red-800",
     Icon: OctagonAlert,
   },
   likely: {
-    label: "Likely exclusion",
+    label: "Possible exclusion",
     className: "border-amber-200 bg-amber-100 text-amber-800",
     Icon: AlertTriangle,
   },
   review: {
-    label: "Needs review",
+    label: "Needs human review",
     className: "border-blue-200 bg-blue-100 text-blue-800",
     Icon: Eye,
   },

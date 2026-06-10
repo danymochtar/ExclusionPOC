@@ -13,7 +13,11 @@ import {
   Upload,
 } from "lucide-react";
 
-import type { AssessmentResult, ExclusionClause } from "@/lib/types";
+import type {
+  AssessmentResult,
+  AssessorDecision,
+  ExclusionClause,
+} from "@/lib/types";
 import { SAMPLE_DIAGNOSES, SAMPLE_POLICY_TEXT } from "@/lib/sample-data";
 import { buildAssessorNote, downloadText } from "@/lib/assessor-note";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,6 +32,9 @@ export default function Home() {
   const [clauses, setClauses] = useState<ExclusionClause[]>([]);
   const [diagnosesText, setDiagnosesText] = useState("");
   const [results, setResults] = useState<AssessmentResult[]>([]);
+  const [decisions, setDecisions] = useState<
+    Record<string, AssessorDecision>
+  >({});
 
   const [extracting, setExtracting] = useState(false);
   const [ingesting, setIngesting] = useState(false);
@@ -73,6 +80,7 @@ export default function Home() {
       setPolicyText(text);
       setClauses([]);
       setResults([]);
+      setDecisions({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF extraction failed.");
     } finally {
@@ -94,6 +102,7 @@ export default function Home() {
       );
       setClauses(clauses);
       setResults([]);
+      setDecisions({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Policy ingestion failed.");
     } finally {
@@ -114,6 +123,7 @@ export default function Home() {
         }
       );
       setResults(results);
+      setDecisions({});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Assessment failed.");
     } finally {
@@ -122,7 +132,10 @@ export default function Home() {
   }
 
   function handleExport() {
-    downloadText("assessor-note.txt", buildAssessorNote(results, clauses));
+    downloadText(
+      "assessor-note.txt",
+      buildAssessorNote(results, clauses, decisions)
+    );
   }
 
   return (
@@ -156,12 +169,15 @@ export default function Home() {
       <div className="mt-8 grid gap-8 lg:grid-cols-12">
         {/* Left panel: policy + rulebook */}
         <section className="space-y-6 lg:col-span-5">
+          <Badge variant="secondary" className="font-normal">
+            Set up once per policy
+          </Badge>
           <div>
             <StepHeading
               step={1}
               icon={<FileText className="size-4" />}
               title="Policy exclusion wording"
-              subtitle="Upload the exclusions section as a PDF, or paste the text."
+              subtitle="Upload the policy's exclusion pages as a PDF, or paste the text — the list of things the policy doesn't cover."
             />
             <div className="mt-3 flex flex-wrap gap-2">
               <input
@@ -195,6 +211,7 @@ export default function Home() {
                   setPolicyText(SAMPLE_POLICY_TEXT);
                   setClauses([]);
                   setResults([]);
+                  setDecisions({});
                   setError(null);
                 }}
               >
@@ -211,6 +228,7 @@ export default function Home() {
                 // The rulebook no longer matches the edited wording.
                 setClauses([]);
                 setResults([]);
+                setDecisions({});
               }}
             />
             <Button
@@ -223,7 +241,7 @@ export default function Home() {
               ) : (
                 <BookOpenText />
               )}
-              {ingesting ? "Digesting policy…" : "Build rulebook"}
+              {ingesting ? "Reading the policy…" : "Read the policy"}
             </Button>
           </div>
 
@@ -231,17 +249,17 @@ export default function Home() {
             <StepHeading
               step={2}
               icon={<ListChecks className="size-4" />}
-              title="Rulebook"
+              title="Check what the app understood"
               subtitle={
                 clauses.length > 0
-                  ? `${clauses.length} exclusion clauses parsed — review before assessing.`
-                  : "Parsed exclusion clauses will appear here."
+                  ? `${clauses.length} exclusion rules found. Each card is one rule, in the policy's own words — check them before assessing.`
+                  : "The exclusion rules found in the policy will appear here as cards."
               }
             />
             {clauses.length === 0 ? (
               <EmptyHint>
-                No rulebook yet. Load the policy wording above and click
-                &ldquo;Build rulebook&rdquo;.
+                Nothing here yet. Load the policy wording above and click
+                &ldquo;Read the policy&rdquo;.
               </EmptyHint>
             ) : (
               <div className="mt-3 max-h-[42rem] space-y-3 overflow-y-auto pr-1">
@@ -255,12 +273,15 @@ export default function Home() {
 
         {/* Right panel: diagnoses + results */}
         <section className="space-y-6 lg:col-span-7">
+          <Badge variant="secondary" className="font-normal">
+            Repeats for every claim
+          </Badge>
           <div>
             <StepHeading
               step={3}
               icon={<ScanSearch className="size-4" />}
               title="Assess diagnoses"
-              subtitle="One diagnosis per line. Each is checked against every clause in the rulebook."
+              subtitle="Type the patient's conditions, one per line. Each is checked against every rule from the policy."
             />
             <div className="mt-3 flex gap-2">
               <Button
@@ -285,10 +306,10 @@ export default function Home() {
             >
               {assessing ? <Loader2 className="animate-spin" /> : <ScanSearch />}
               {assessing
-                ? `Assessing ${diagnoses.length} diagnos${diagnoses.length === 1 ? "is" : "es"}…`
+                ? `Checking ${diagnoses.length} condition${diagnoses.length === 1 ? "" : "s"}…`
                 : clauses.length === 0
-                  ? "Build the rulebook first"
-                  : "Run assessment"}
+                  ? "Read the policy first"
+                  : "Check against the policy"}
             </Button>
           </div>
 
@@ -299,7 +320,7 @@ export default function Home() {
                   step={4}
                   icon={<ShieldAlert className="size-4" />}
                   title="Flags for review"
-                  subtitle="Each flag cites the clause it matched. An assessor makes the final call."
+                  subtitle="Each alert shows which policy rule it matched and why. You make the final call."
                 />
                 <Button variant="outline" size="sm" onClick={handleExport}>
                   <Download />
@@ -312,6 +333,15 @@ export default function Home() {
                     key={`${i}-${result.diagnosis}`}
                     result={result}
                     clauseById={clauseById}
+                    decision={decisions[result.diagnosis]}
+                    onDecide={(decision) =>
+                      setDecisions((prev) => {
+                        const next = { ...prev };
+                        if (decision) next[result.diagnosis] = decision;
+                        else delete next[result.diagnosis];
+                        return next;
+                      })
+                    }
                   />
                 ))}
               </div>

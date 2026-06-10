@@ -1,15 +1,26 @@
-import type { AssessmentResult, ExclusionClause } from "./types";
+import type {
+  AssessmentResult,
+  AssessorDecision,
+  ExclusionClause,
+} from "./types";
 
 const STATUS_LABEL: Record<AssessmentResult["status"], string> = {
-  excluded: "EXCLUDED — VERIFY",
-  likely: "LIKELY EXCLUSION",
-  review: "NEEDS REVIEW",
+  excluded: "EXCLUSION FOUND — VERIFY",
+  likely: "POSSIBLE EXCLUSION",
+  review: "NEEDS HUMAN REVIEW",
   not_excluded: "NO EXCLUSION FOUND",
+};
+
+const DECISION_LABEL: Record<AssessorDecision["action"], string> = {
+  confirm: "Exclusion confirmed by assessor",
+  override: "Overridden by assessor",
+  info: "More information requested",
 };
 
 export function buildAssessorNote(
   results: AssessmentResult[],
-  clauses: ExclusionClause[]
+  clauses: ExclusionClause[],
+  decisions: Record<string, AssessorDecision> = {}
 ): string {
   const clauseById = new Map(clauses.map((c) => [c.id, c]));
   const lines: string[] = [
@@ -33,9 +44,19 @@ export function buildAssessorNote(
         }`
       );
       if (match.exceptionNote) {
-        lines.push(`    ⚠ Exception may apply: ${match.exceptionNote}`);
+        lines.push(
+          `    ⚠ Exception — may still be covered: ${match.exceptionNote}`
+        );
       }
     }
+    const decision = decisions[result.diagnosis];
+    lines.push(
+      decision
+        ? `    Assessor: ${DECISION_LABEL[decision.action]}${
+            decision.reason ? ` — "${decision.reason}"` : ""
+          }`
+        : "    Assessor: not yet reviewed"
+    );
     lines.push("");
   }
 

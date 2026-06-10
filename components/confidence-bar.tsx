@@ -23,7 +23,7 @@ export function ConfidenceBar({
         />
       </div>
       <span className="text-xs tabular-nums text-muted-foreground">
-        {pct}% confidence
+        AI confidence: {pct}%
       </span>
     </div>
   );

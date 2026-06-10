@@ -41,14 +41,17 @@ export function ClauseCard({ clause }: { clause: ExclusionClause }) {
           <div className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
             <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              <span className="font-medium">Carve-out: </span>
+              <span className="font-medium">
+                Exception — may still be covered:{" "}
+              </span>
               {clause.exceptions.join("; ")}
             </span>
           </div>
         )}
         {clause.category === "temporal" && (
           <p className="text-xs italic text-muted-foreground">
-            Needs policy data (dates) — detected but not scored in this POC.
+            Depends on dates (waiting period / pre-existing) — needs the
+            member&apos;s policy dates to confirm.
           </p>
         )}
         {clause.rawText && (
@@ -61,7 +64,7 @@ export function ClauseCard({ clause }: { clause: ExclusionClause }) {
               <ChevronDown
                 className={cn("size-3.5 transition-transform", open && "rotate-180")}
               />
-              {open ? "Hide clause text" : "Show clause text"}
+              {open ? "Hide original policy wording" : "Show original policy wording"}
             </button>
             {open && (
               <p className="mt-1.5 rounded-md bg-muted p-2.5 text-xs leading-relaxed text-muted-foreground">

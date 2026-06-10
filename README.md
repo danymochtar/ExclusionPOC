@@ -80,6 +80,17 @@ Open http://localhost:3000.
   shown as "needs policy data".
 - Sample data is de-identified; never use real patient identifiers.
 
+## Production integration path
+
+The POC's core is the production core. In a real MiCare deployment only the
+edges change: manual diagnosis entry (step 3) is replaced by an API hook from
+the claims system (each incoming claim calls `POST /api/assess`), and the
+flags (step 4) either embed in the claims UI or land in a work queue. The
+rulebook review becomes an approve/edit step with versioning, and the
+assessor decisions captured on each flag become the feedback data for tuning
+prompts and measuring precision. The middle — ingest → rulebook → assess →
+structured results — stays identical.
+
 ## Production hardening (not done in this POC)
 
 - Uploaded policy text goes into the LLM prompt, so a malicious document

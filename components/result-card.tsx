@@ -1,9 +1,14 @@
 import { TriangleAlert } from "lucide-react";
 
-import type { AssessmentResult, ExclusionClause } from "@/lib/types";
+import type {
+  AssessmentResult,
+  AssessorDecision,
+  ExclusionClause,
+} from "@/lib/types";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
 import { ConfidenceBar } from "@/components/confidence-bar";
+import { AssessorDecisionBar } from "@/components/assessor-decision";
 import { cn } from "@/lib/utils";
 
 const STATUS_EDGE: Record<AssessmentResult["status"], string> = {
@@ -16,9 +21,13 @@ const STATUS_EDGE: Record<AssessmentResult["status"], string> = {
 export function ResultCard({
   result,
   clauseById,
+  decision,
+  onDecide,
 }: {
   result: AssessmentResult;
   clauseById: Map<string, ExclusionClause>;
+  decision?: AssessorDecision;
+  onDecide: (decision: AssessorDecision | undefined) => void;
 }) {
   return (
     <Card className={cn("border-l-4", STATUS_EDGE[result.status])}>
@@ -33,8 +42,8 @@ export function ResultCard({
         {result.matches.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {result.status === "not_excluded"
-              ? "No exclusion clause appears to apply to this diagnosis."
-              : "The model could not cite a specific clause — route to an assessor for manual review."}
+              ? "None of the policy's exclusion rules appear to apply to this condition."
+              : "The app could not point to a specific policy rule — please review this one manually."}
           </p>
         ) : (
           <ul className="space-y-3">
@@ -60,7 +69,7 @@ export function ResultCard({
                       <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
                       <span>
                         <span className="font-medium">
-                          Exception may apply:{" "}
+                          Exception — may still be covered:{" "}
                         </span>
                         {match.exceptionNote}
                       </span>
@@ -71,6 +80,7 @@ export function ResultCard({
             })}
           </ul>
         )}
+        <AssessorDecisionBar decision={decision} onDecide={onDecide} />
       </CardContent>
     </Card>
   );
