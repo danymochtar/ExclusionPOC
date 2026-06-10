@@ -18,6 +18,7 @@ import {
 import {
   parseCaseLines,
   SAMPLE_BENCHMARK_CASES,
+  SAMPLE_BENCHMARK_CASES_SCORED,
 } from "@/lib/benchmark-cases";
 import { SAMPLE_POLICY_TEXT } from "@/lib/sample-data";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -30,12 +31,12 @@ import { cn } from "@/lib/utils";
 
 interface CaseRow {
   diagnosis: string;
-  expectFlag: boolean;
+  expectFlag?: boolean;
   expectClause?: string;
   status: string;
   citedClauses: string[];
   exceptionNoted: boolean;
-  flagCorrect: boolean;
+  flagCorrect: boolean | null;
   citationCorrect: boolean | null;
   confidence: number;
   failed: boolean;
@@ -47,8 +48,9 @@ interface ModelRun {
   clauseCount: number;
   ingestMs: number;
   assessMs: number;
-  flagAccuracy: number;
-  citationAccuracy: number;
+  flaggedCount: number;
+  flagAccuracy: number | null;
+  citationAccuracy: number | null;
   exceptionsCaught: number;
   avgConfidence: number;
   failedCalls: number;
@@ -219,37 +221,42 @@ export default function BenchmarkPage() {
         <section>
           <SectionHeading
             icon={<ListChecks className="size-4" />}
-            title="Test conditions with expected answers"
+            title="Test conditions"
             subtitle={
               <>
-                One per line:{" "}
+                One condition per line — that&apos;s all you need. To also
+                score accuracy, you can add a marking key after a{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">|</code>:{" "}
                 <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  condition | flag 5
+                  | flag 5
                 </code>{" "}
-                (should be flagged, citing rule 5),{" "}
+                (should be flagged, rule 5),{" "}
                 <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  condition | flag 6/11
+                  | clear
                 </code>{" "}
-                (rule 6 or 11), or{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  condition | clear
-                </code>{" "}
-                (should not be flagged). The part after{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">|</code>{" "}
-                is your answer key for marking — the models never see it; they
-                only get the condition text.
+                (should not be flagged). The key is only used for marking —
+                the models never see it.
               </>
             }
           />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2"
-            onClick={() => setCasesText(SAMPLE_BENCHMARK_CASES)}
-          >
-            <FlaskConical />
-            Load sample cases
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCasesText(SAMPLE_BENCHMARK_CASES)}
+            >
+              <FlaskConical />
+              Load sample cases
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setCasesText(SAMPLE_BENCHMARK_CASES_SCORED)}
+            >
+              <FlaskConical />
+              Samples with marking key
+            </Button>
+          </div>
           <Textarea
             className="mt-2 min-h-40 font-mono text-xs"
             value={casesText}
@@ -331,6 +338,7 @@ export default function BenchmarkPage() {
                 <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
                   <th className="px-4 py-2.5 font-medium">Model</th>
                   <th className="px-4 py-2.5 font-medium">Rules found</th>
+                  <th className="px-4 py-2.5 font-medium">Flagged</th>
                   <th className="px-4 py-2.5 font-medium">Flag accuracy</th>
                   <th className="px-4 py-2.5 font-medium">Citation accuracy</th>
                   <th className="px-4 py-2.5 font-medium">Exceptions caught</th>
@@ -348,6 +356,9 @@ export default function BenchmarkPage() {
                     {r.status === "done" && r.run ? (
                       <>
                         <td className="px-4 py-2.5">{r.run.clauseCount}</td>
+                        <td className="px-4 py-2.5 tabular-nums">
+                          {r.run.flaggedCount}/{r.run.rows.length}
+                        </td>
                         <td className="px-4 py-2.5">
                           <Pct value={r.run.flagAccuracy} />
                         </td>
@@ -363,7 +374,7 @@ export default function BenchmarkPage() {
                         </td>
                       </>
                     ) : (
-                      <td colSpan={6} className="px-4 py-2.5 text-muted-foreground">
+                      <td colSpan={7} className="px-4 py-2.5 text-muted-foreground">
                         {r.status === "pending" && "Waiting…"}
                         {r.status === "running" && (
                           <span className="flex items-center gap-2">
@@ -455,9 +466,11 @@ function ModelDetail({ run }: { run: ModelRun }) {
                   <tr key={row.diagnosis} className="border-b last:border-0">
                     <td className="px-2 py-2">{row.diagnosis}</td>
                     <td className="px-2 py-2 text-muted-foreground">
-                      {row.expectFlag
-                        ? `flag${row.expectClause ? ` (rule ${row.expectClause})` : ""}`
-                        : "clear"}
+                      {row.expectFlag === undefined
+                        ? "—"
+                        : row.expectFlag
+                          ? `flag${row.expectClause ? ` (rule ${row.expectClause})` : ""}`
+                          : "clear"}
                     </td>
                     <td className="px-2 py-2">
                       {row.failed ? (
@@ -472,7 +485,11 @@ function ModelDetail({ run }: { run: ModelRun }) {
                       {row.citedClauses.join(", ") || "—"}
                     </td>
                     <td className="px-2 py-2">
-                      <Mark ok={row.flagCorrect} />
+                      {row.flagCorrect === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <Mark ok={row.flagCorrect} />
+                      )}
                     </td>
                     <td className="px-2 py-2">
                       {row.citationCorrect === null ? (
@@ -502,7 +519,10 @@ function ModelDetail({ run }: { run: ModelRun }) {
   );
 }
 
-function Pct({ value }: { value: number }) {
+function Pct({ value }: { value: number | null }) {
+  if (value === null) {
+    return <span className="text-muted-foreground">— (no marking key)</span>;
+  }
   const pct = Math.round(value * 100);
   return (
     <span

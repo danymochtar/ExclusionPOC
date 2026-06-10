@@ -17,18 +17,18 @@ const MAX_POLICY_CHARS = 100_000;
 
 interface BenchmarkCase {
   diagnosis: string;
-  expectFlag: boolean;
+  expectFlag?: boolean; // undefined = no answer key; compared but not scored
   expectClause?: string; // e.g. "17" or "6/11" for alternatives
 }
 
 export interface BenchmarkCaseRow {
   diagnosis: string;
-  expectFlag: boolean;
+  expectFlag?: boolean;
   expectClause?: string;
   status: string;
   citedClauses: string[];
   exceptionNoted: boolean;
-  flagCorrect: boolean;
+  flagCorrect: boolean | null; // null = no answer key
   citationCorrect: boolean | null; // null = not applicable
   confidence: number;
   failed: boolean; // call failed and degraded to review
@@ -133,7 +133,8 @@ export async function POST(req: Request) {
         status: result.status,
         citedClauses,
         exceptionNoted: result.matches.some((m) => Boolean(m.exceptionNote)),
-        flagCorrect: flagged === c.expectFlag,
+        flagCorrect:
+          c.expectFlag === undefined ? null : flagged === c.expectFlag,
         citationCorrect,
         confidence: result.overallConfidence,
         failed,
@@ -141,6 +142,7 @@ export async function POST(req: Request) {
       };
     });
 
+    const scoredRows = rows.filter((r) => r.flagCorrect !== null);
     const citationRows = rows.filter((r) => r.citationCorrect !== null);
     const inputTokens = usages.reduce((s, u) => s + u.inputTokens, 0);
     const outputTokens = usages.reduce((s, u) => s + u.outputTokens, 0);
@@ -150,11 +152,19 @@ export async function POST(req: Request) {
       clauseCount: clauses.length,
       ingestMs,
       assessMs,
-      flagAccuracy: ratio(rows.filter((r) => r.flagCorrect).length, rows.length),
-      citationAccuracy: ratio(
-        citationRows.filter((r) => r.citationCorrect).length,
-        citationRows.length
-      ),
+      flaggedCount: rows.filter((r) => r.status !== "not_excluded").length,
+      // Accuracy is only computable for cases that carry an answer key.
+      flagAccuracy:
+        scoredRows.length === 0
+          ? null
+          : ratio(scoredRows.filter((r) => r.flagCorrect).length, scoredRows.length),
+      citationAccuracy:
+        citationRows.length === 0
+          ? null
+          : ratio(
+              citationRows.filter((r) => r.citationCorrect).length,
+              citationRows.length
+            ),
       exceptionsCaught: rows.filter((r) => r.exceptionNoted).length,
       avgConfidence: ratio(
         rows.reduce((s, r) => s + r.confidence, 0),
@@ -196,21 +206,21 @@ function parseCases(raw: unknown): BenchmarkCase[] | null {
   }
   const cases: BenchmarkCase[] = [];
   for (const item of raw) {
+    const c = item as BenchmarkCase;
     if (
-      !item ||
-      typeof item !== "object" ||
-      typeof (item as BenchmarkCase).diagnosis !== "string" ||
-      !(item as BenchmarkCase).diagnosis.trim() ||
-      typeof (item as BenchmarkCase).expectFlag !== "boolean"
+      !c ||
+      typeof c !== "object" ||
+      typeof c.diagnosis !== "string" ||
+      !c.diagnosis.trim() ||
+      (c.expectFlag !== undefined && typeof c.expectFlag !== "boolean")
     ) {
       return null;
     }
-    const expectClause = (item as BenchmarkCase).expectClause;
     cases.push({
-      diagnosis: (item as BenchmarkCase).diagnosis.trim(),
-      expectFlag: (item as BenchmarkCase).expectFlag,
-      ...(typeof expectClause === "string" && expectClause.trim()
-        ? { expectClause: expectClause.trim() }
+      diagnosis: c.diagnosis.trim(),
+      ...(c.expectFlag !== undefined ? { expectFlag: c.expectFlag } : {}),
+      ...(typeof c.expectClause === "string" && c.expectClause.trim()
+        ? { expectClause: c.expectClause.trim() }
         : {}),
     });
   }
