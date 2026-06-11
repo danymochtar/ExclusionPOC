@@ -29,7 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import type { ModelOption } from "@/components/model-select";
+import { priceHint, type ModelOption } from "@/components/model-select";
 import { cn } from "@/lib/utils";
 
 interface CaseRow {
@@ -405,7 +405,7 @@ export default function BenchmarkPage() {
                     active ? "text-primary-foreground/70" : "text-muted-foreground"
                   )}
                 >
-                  ${m.priceIn}/${m.priceOut}
+                  {priceHint(m)}
                 </span>
                 {undeployed && (
                   <span
@@ -506,7 +506,9 @@ export default function BenchmarkPage() {
                           {((r.run.ingestMs + r.run.assessMs) / 1000).toFixed(1)}s
                         </td>
                         <td className="px-4 py-2.5 tabular-nums">
-                          ${r.run.estCostUsd.toFixed(4)}
+                          {r.run.estCostUsd > 0
+                            ? `$${r.run.estCostUsd.toFixed(4)}`
+                            : "—"}
                         </td>
                       </>
                     ) : (

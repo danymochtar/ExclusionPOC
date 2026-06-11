@@ -1,8 +1,19 @@
 import { createAzure } from "@ai-sdk/azure";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { APICallError, RetryError, generateText, type LanguageModel } from "ai";
-import { onSecondaryAzure, type ModelEntry, type Provider } from "@/lib/models";
+import {
+  APICallError,
+  RetryError,
+  gateway,
+  generateText,
+  type LanguageModel,
+} from "ai";
+import {
+  DEFAULT_GATEWAY_MODELS,
+  onSecondaryAzure,
+  type ModelEntry,
+  type Provider,
+} from "@/lib/models";
 
 /**
  * Thin provider wrapper so the LLM is swappable.
@@ -45,6 +56,16 @@ export function getModel(spec?: Pick<ModelEntry, "provider" | "model">): Languag
       apiKey: requireEnv("GOOGLE_GENERATIVE_AI_API_KEY"),
     });
     return google(spec?.model ?? process.env.GOOGLE_MODEL ?? "gemini-3.5-flash");
+  }
+
+  if (provider === "gateway") {
+    // Vercel AI Gateway — the provider reads AI_GATEWAY_API_KEY itself;
+    // model ids are "creator/model" (https://vercel.com/ai-gateway/models).
+    requireEnv("AI_GATEWAY_API_KEY");
+    const fallback = (process.env.AI_GATEWAY_MODELS ?? DEFAULT_GATEWAY_MODELS)
+      .split(",")[0]
+      .trim();
+    return gateway(spec?.model ?? fallback);
   }
 
   // Azure deployments are named per resource; spec.model is used as the
@@ -96,6 +117,7 @@ function detectProvider(): Provider {
   if (process.env.AZURE_OPENAI_API_KEY) return "azure";
   if (process.env.ANTHROPIC_API_KEY) return "anthropic";
   if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) return "google";
+  if (process.env.AI_GATEWAY_API_KEY) return "gateway";
   return "azure";
 }
 

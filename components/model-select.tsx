@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export interface ModelOption {
   id: string;
   label: string;
-  provider: "azure" | "anthropic" | "google";
+  provider: "azure" | "anthropic" | "google" | "gateway";
   tier: "flagship" | "balanced" | "budget";
   priceIn: number;
   priceOut: number;
@@ -15,7 +15,14 @@ const PROVIDER_LABEL: Record<ModelOption["provider"], string> = {
   azure: "Azure OpenAI",
   anthropic: "Anthropic",
   google: "Google Gemini",
+  gateway: "Vercel AI Gateway",
 };
+
+export function priceHint(m: ModelOption): string {
+  return m.priceIn || m.priceOut
+    ? `$${m.priceIn}/$${m.priceOut}`
+    : "price varies";
+}
 
 export function ModelSelect({
   models,
@@ -45,7 +52,8 @@ export function ModelSelect({
               .filter((m) => m.provider === provider)
               .map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.label} — ${m.priceIn}/${m.priceOut} per 1M tokens
+                  {m.label} — {priceHint(m)}
+                  {m.priceIn || m.priceOut ? " per 1M tokens" : ""}
                 </option>
               ))}
           </optgroup>

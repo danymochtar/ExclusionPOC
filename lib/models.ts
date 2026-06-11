@@ -1,7 +1,7 @@
 // Model catalog + router. Server-only (reads env) except for the types and
 // the public shape exposed via /api/models.
 
-export type Provider = "azure" | "anthropic" | "google";
+export type Provider = "azure" | "anthropic" | "google" | "gateway";
 export type ModelTier = "flagship" | "balanced" | "budget";
 
 export interface ModelEntry {
@@ -38,6 +38,7 @@ const PROVIDER_KEY_ENV: Record<Provider, string> = {
   azure: "AZURE_OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   google: "GOOGLE_GENERATIVE_AI_API_KEY",
+  gateway: "AI_GATEWAY_API_KEY",
 };
 
 export function providerConfigured(provider: Provider): boolean {
@@ -63,6 +64,35 @@ export function onSecondaryAzure(model: string): boolean {
     .includes(model.toLowerCase());
 }
 
+export const DEFAULT_GATEWAY_MODELS = "xai/grok-4.3";
+
+/**
+ * Vercel AI Gateway entries — one API key, hundreds of models in
+ * "creator/model" form (see https://vercel.com/ai-gateway/models).
+ * AI_GATEWAY_MODELS (comma-separated ids) picks which appear; prices are
+ * unknown to the catalog, so cost estimates show as "—" for these.
+ */
+export function gatewayEntries(): ModelEntry[] {
+  if (!process.env.AI_GATEWAY_API_KEY) return [];
+  return (process.env.AI_GATEWAY_MODELS ?? DEFAULT_GATEWAY_MODELS)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((id) => ({
+      id: `gateway/${id}`,
+      provider: "gateway" as const,
+      model: id,
+      label: `${id} (Gateway)`,
+      tier: "balanced" as const,
+      priceIn: 0,
+      priceOut: 0,
+    }));
+}
+
+function allModels(): ModelEntry[] {
+  return [...MODEL_CATALOG, ...gatewayEntries()];
+}
+
 export function entryConfigured(entry: ModelEntry): boolean {
   if (entry.provider !== "azure") return providerConfigured(entry.provider);
   return onSecondaryAzure(entry.model)
@@ -72,11 +102,11 @@ export function entryConfigured(entry: ModelEntry): boolean {
 
 /** Catalog entries usable with the API keys currently configured. */
 export function availableModels(): ModelEntry[] {
-  return MODEL_CATALOG.filter(entryConfigured);
+  return allModels().filter(entryConfigured);
 }
 
 export function findModel(id: string): ModelEntry | undefined {
-  return MODEL_CATALOG.find((m) => m.id === id);
+  return allModels().find((m) => m.id === id);
 }
 
 export type Phase = "ingest" | "assess";
@@ -88,7 +118,7 @@ const PHASE_TIERS: Record<Phase, ModelTier[]> = {
   assess: ["balanced", "budget", "flagship"],
 };
 
-const PROVIDER_ORDER: Provider[] = ["anthropic", "azure", "google"];
+const PROVIDER_ORDER: Provider[] = ["anthropic", "azure", "google", "gateway"];
 
 /**
  * Resolve which model to run for a phase. An explicit modelId wins;
